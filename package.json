@@ -1,0 +1,20 @@
+{
+  "name": "health-passport",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Privacy-first wearable health data continuity app.",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "services/api"
+  ],
+  "scripts": {
+    "test": "node --test --experimental-transform-types packages/core/test/*.test.ts services/api/test/*.test.ts",
+    "test:core": "node --test --experimental-transform-types packages/core/test/*.test.ts",
+    "test:api": "node --test --experimental-transform-types services/api/test/*.test.ts",
+    "dev:api": "node --experimental-transform-types services/api/src/server.ts"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}
