@@ -22,6 +22,7 @@ installation:
 
 ```bash
 node --test --experimental-transform-types packages/core/test/*.test.ts services/api/test/*.test.ts
+swift run --package-path apps/ios/HealthPassport HealthPassportKitSmokeTests
 swift build --package-path apps/ios/HealthPassport
 ```
 

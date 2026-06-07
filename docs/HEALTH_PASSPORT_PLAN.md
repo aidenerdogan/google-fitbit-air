@@ -87,8 +87,8 @@ Done when:
 
 - `Done` Create main app navigation.
 - `Done` Add tabs or sections for Passport, Sources, Receipts, Coach, and Settings.
-- `In Progress` Add empty states for first launch.
-- `Todo` Add onboarding screen explaining Apple Health and Fitbit/Google permissions.
+- `Done` Add empty states for first launch.
+- `Done` Add onboarding screen explaining Apple Health and Fitbit/Google permissions.
 - `In Progress` Add app theme with a simple original visual identity.
 
 Done when:
@@ -99,12 +99,12 @@ Done when:
 
 ### Phase 3: Local Vault
 
-- `Todo` Choose local storage implementation.
-- `Todo` Encrypt local health data at rest.
-- `Todo` Store source metadata and sync receipts.
-- `Todo` Store normalized samples without real test health data in fixtures.
-- `Todo` Add export path for user-owned archive.
-- `Todo` Add delete local data action.
+- `Done` Choose local storage implementation.
+- `Done` Encrypt local health data at rest.
+- `Done` Store source metadata and sync receipts.
+- `In Progress` Store normalized samples without real test health data in fixtures.
+- `Done` Add export path for user-owned archive.
+- `Done` Add delete local data action.
 
 Done when:
 
@@ -342,7 +342,7 @@ Steps:
 - `Done` Capability matrix tests.
 - `Done` Dedupe rule tests.
 - `Done` Sync receipt tests.
-- `Todo` Error mapping tests.
+- `In Progress` Error mapping tests.
 
 ### HealthKit Permission Tests
 
@@ -367,8 +367,8 @@ Steps:
 - `In Progress` Local sync does not send raw health data to backend.
 - `Todo` Logs do not include health samples.
 - `Todo` Crash reports do not include health samples.
-- `Todo` Export contains only user-requested data.
-- `Todo` Delete local data removes local vault data.
+- `Done` Export contains only user-requested data.
+- `Done` Delete local data removes local vault data.
 - `Todo` Delete cloud backup removes backup blob.
 
 ### AI Context-Pack Tests
@@ -392,6 +392,9 @@ Steps:
 
 - `Done` 2026-06-05: Core and API tests passed with `node --test --experimental-transform-types packages/core/test/*.test.ts services/api/test/*.test.ts`.
 - `Done` 2026-06-05: SwiftUI app package built with `swift build --package-path apps/ios/HealthPassport`.
+- `Done` 2026-06-08: Swift kit smoke tests passed with `swift run --package-path apps/ios/HealthPassport HealthPassportKitSmokeTests`.
+- `Done` 2026-06-08: SwiftUI app package rebuilt with `swift build --package-path apps/ios/HealthPassport`.
+- `Blocked` `swift test` is unavailable in the current Command Line Tools environment because the XCTest/Testing modules are not present.
 - `Blocked` Full iOS simulator, HealthKit entitlement, and App Store capability checks require full Xcode instead of Command Line Tools only.
 
 ## 6. Open Questions

@@ -1,4 +1,5 @@
 import Foundation
+import HealthPassportKit
 
 struct PassportMetric: Identifiable, Hashable {
     let id: String
@@ -59,4 +60,36 @@ enum DemoData {
             status: "Connect a source to create the first receipt"
         )
     ]
+
+    static let onboardingSteps: [OnboardingStep] = [
+        OnboardingStep(
+            title: "Connect your source",
+            detail: "Fitbit/Google will be the first wearable connection. No account tokens are stored in plain app files."
+        ),
+        OnboardingStep(
+            title: "Review Apple Health permissions",
+            detail: "Health Passport asks only for the data types needed for writeback and keeps working when some access is denied."
+        ),
+        OnboardingStep(
+            title: "Keep a private vault",
+            detail: "Imported records are normalized into an encrypted local vault before any optional backup or AI feature."
+        )
+    ]
+
+    static let vaultPreview = VaultSnapshot(
+        sources: [
+            VaultSource(
+                id: "local-vault",
+                displayName: "Encrypted Local Vault",
+                provider: "health_passport",
+                connectedAt: Date(timeIntervalSince1970: 1_771_200_000)
+            )
+        ]
+    )
+}
+
+struct OnboardingStep: Identifiable, Hashable {
+    let id = UUID()
+    let title: String
+    let detail: String
 }
