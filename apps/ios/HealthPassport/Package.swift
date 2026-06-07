@@ -9,9 +9,19 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "HealthPassportApp", targets: ["HealthPassportApp"])
+        .library(name: "HealthPassportKit", targets: ["HealthPassportKit"]),
+        .executable(name: "HealthPassportApp", targets: ["HealthPassportApp"]),
+        .executable(name: "HealthPassportKitSmokeTests", targets: ["HealthPassportKitSmokeTests"])
     ],
     targets: [
-        .executableTarget(name: "HealthPassportApp")
+        .target(name: "HealthPassportKit"),
+        .executableTarget(
+            name: "HealthPassportApp",
+            dependencies: ["HealthPassportKit"]
+        ),
+        .executableTarget(
+            name: "HealthPassportKitSmokeTests",
+            dependencies: ["HealthPassportKit"]
+        )
     ]
 )
