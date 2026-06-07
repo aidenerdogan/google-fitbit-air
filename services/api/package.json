@@ -1,0 +1,15 @@
+{
+  "name": "@health-passport/api",
+  "version": "0.1.0",
+  "description": "Backend skeleton for Health Passport accounts, encrypted backup, and AI relay.",
+  "type": "module",
+  "main": "./src/server.ts",
+  "scripts": {
+    "test": "node --test --experimental-transform-types test/*.test.ts",
+    "dev": "node --experimental-transform-types src/server.ts"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "license": "Apache-2.0"
+}
