@@ -2,6 +2,7 @@ import Foundation
 import HealthPassportKit
 
 try runEncryptedVaultSmokeTests()
+try runAppleHealthWritebackPolicySmokeTests()
 
 private func runEncryptedVaultSmokeTests() throws {
     let fileURL = temporaryVaultURL()
@@ -78,6 +79,42 @@ private func runEncryptedVaultSmokeTests() throws {
     }
 
     print("HealthPassportKitSmokeTests passed")
+}
+
+private func runAppleHealthWritebackPolicySmokeTests() throws {
+    let source = SourceReference(provider: "fitbit", deviceModel: "Fitbit Air")
+    let steps = VaultSample(
+        id: "steps-1",
+        metric: .steps,
+        startAt: Date(timeIntervalSince1970: 10),
+        endAt: Date(timeIntervalSince1970: 20),
+        numericValue: 500,
+        unit: "count",
+        source: source
+    )
+    let hrv = VaultSample(
+        id: "hrv-1",
+        metric: .hrvRmssd,
+        startAt: Date(timeIntervalSince1970: 10),
+        numericValue: 40,
+        unit: "ms",
+        source: source
+    )
+    let emptySteps = VaultSample(
+        id: "steps-empty",
+        metric: .steps,
+        startAt: Date(timeIntervalSince1970: 10),
+        source: source
+    )
+
+    let stepsDecision = AppleHealthWritebackPolicy.decision(for: steps)
+    assert(stepsDecision.readiness == .writeable, "Steps should be writeable")
+
+    let hrvDecision = AppleHealthWritebackPolicy.decision(for: hrv)
+    assert(hrvDecision.readiness == .passportOnly, "RMSSD HRV should remain Passport-only")
+
+    let emptyStepsDecision = AppleHealthWritebackPolicy.decision(for: emptySteps)
+    assert(emptyStepsDecision.readiness == .invalid, "Steps without a numeric value should be invalid")
 }
 
 private func temporaryVaultURL() -> URL {

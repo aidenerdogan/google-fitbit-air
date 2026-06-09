@@ -113,12 +113,12 @@ Done when:
 
 ### Phase 4: HealthKit Permissions And Writeback
 
-- `Todo` Add HealthKit capability to the iOS app.
-- `Todo` Define requested read and write data types.
-- `Todo` Ask for permissions with clear purpose text.
-- `Todo` Handle denied and partially granted permissions.
-- `Todo` Write supported samples to Apple Health.
-- `Todo` Record HealthKit write results in sync receipts.
+- `In Progress` Add HealthKit capability to the iOS app. Code/config templates exist; Xcode capability must still be attached manually.
+- `Done` Define requested read and write data types.
+- `Done` Ask for permissions with clear purpose text.
+- `Done` Handle denied and partially granted permissions.
+- `In Progress` Write supported samples to Apple Health. Code path exists; simulator/device validation is still required.
+- `In Progress` Record HealthKit write results in sync receipts. Writeback receipt models exist; persistence into vault receipts is still required.
 
 Done when:
 
@@ -256,9 +256,10 @@ Steps:
 2. Enable HealthKit capability.
 3. In Xcode, open the app target.
 4. Add the HealthKit capability.
-5. Add required HealthKit purpose strings.
-6. Keep permission text simple and specific.
-7. Verify the app asks only for data types it truly needs.
+5. Attach `apps/ios/HealthPassport/Config/HealthPassport.entitlements` or copy its HealthKit key into the app entitlements file.
+6. Add the purpose strings from `apps/ios/HealthPassport/Config/Info.plist` to the app target Info settings.
+7. Keep permission text simple and specific.
+8. Verify the app asks only for data types it truly needs.
 
 ### Register Fitbit/Google Developer App
 
@@ -394,6 +395,7 @@ Steps:
 - `Done` 2026-06-05: SwiftUI app package built with `swift build --package-path apps/ios/HealthPassport`.
 - `Done` 2026-06-08: Swift kit smoke tests passed with `swift run --package-path apps/ios/HealthPassport HealthPassportKitSmokeTests`.
 - `Done` 2026-06-08: SwiftUI app package rebuilt with `swift build --package-path apps/ios/HealthPassport`.
+- `Done` 2026-06-09: Added HealthKit permission/writeback client, entitlement and purpose-string templates, and writeback policy smoke tests.
 - `Blocked` `swift test` is unavailable in the current Command Line Tools environment because the XCTest/Testing modules are not present.
 - `Blocked` Full iOS simulator, HealthKit entitlement, and App Store capability checks require full Xcode instead of Command Line Tools only.
 

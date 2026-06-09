@@ -24,6 +24,11 @@ struct PassportView: View {
 }
 
 struct SourcesView: View {
+    @State private var permissionSnapshot = HealthPermissionSnapshot.notRequested
+    @State private var isRequestingAppleHealth = false
+
+    private let healthClient = HealthKitWritebackClient()
+
     var body: some View {
         NavigationStack {
             List {
@@ -31,6 +36,14 @@ struct SourcesView: View {
                     EmptyStatePanel(
                         title: "No source connected yet",
                         detail: "Start with Fitbit/Google, then choose which data types should be preserved before Apple Health writeback."
+                    )
+                }
+
+                Section("Apple Health") {
+                    HealthPermissionPanel(
+                        snapshot: permissionSnapshot,
+                        isRequesting: isRequestingAppleHealth,
+                        requestAction: requestAppleHealthAccess
                     )
                 }
 
@@ -46,6 +59,24 @@ struct SourcesView: View {
                 }
             }
             .navigationTitle("Sources")
+        }
+    }
+
+    private func requestAppleHealthAccess() {
+        isRequestingAppleHealth = true
+
+        Task {
+            do {
+                permissionSnapshot = try await healthClient.requestWritePermissions()
+            } catch {
+                permissionSnapshot = HealthPermissionSnapshot(
+                    status: .denied,
+                    message: error.localizedDescription,
+                    requestedTypes: permissionSnapshot.requestedTypes
+                )
+            }
+
+            isRequestingAppleHealth = false
         }
     }
 }
@@ -238,6 +269,74 @@ private struct SourceRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
+    }
+}
+
+private struct HealthPermissionPanel: View {
+    let snapshot: HealthPermissionSnapshot
+    let isRequesting: Bool
+    let requestAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Writeback access")
+                        .font(.headline)
+                    Text(snapshot.message)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text(snapshot.status.rawValue)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(permissionColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(permissionColor)
+            }
+
+            Button(action: requestAction) {
+                Text(isRequesting ? "Requesting..." : "Request Apple Health Access")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isRequesting)
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(snapshot.requestedTypes) { type in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(type.name)
+                                .font(.subheadline.weight(.semibold))
+                            Text(type.direction.rawValue)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Text(type.access.rawValue)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var permissionColor: Color {
+        switch snapshot.status {
+        case .notRequested: .secondary
+        case .granted: .green
+        case .partiallyGranted: .orange
+        case .denied: .red
+        case .unavailable: .gray
+        }
     }
 }
 

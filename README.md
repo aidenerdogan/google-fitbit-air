@@ -7,12 +7,13 @@ to Apple Health with user permission.
 
 ## Current Milestone
 
-This repository is in Phase 1: foundation.
+This repository is in Phase 4: HealthKit permissions and writeback.
 
 - Native SwiftUI app shell: `apps/ios/HealthPassport`
 - Shared open-core sync models: `packages/core`
 - Backend skeleton for Pro/backup/AI relay: `services/api`
 - Planning and privacy docs: `docs`
+- HealthKit entitlement and purpose-string templates: `apps/ios/HealthPassport/Config`
 
 ## Verification
 
@@ -26,4 +27,4 @@ swift run --package-path apps/ios/HealthPassport HealthPassportKitSmokeTests
 swift build --package-path apps/ios/HealthPassport
 ```
 
-Full iOS simulator and HealthKit entitlement validation require Xcode.
+Full iOS simulator, HealthKit entitlement validation, and real permission prompts require Xcode.
