@@ -10,6 +10,11 @@ to Apple Health.
 The app must continue to work in a limited mode when users deny or revoke some
 permissions.
 
+Current templates live in `apps/ios/HealthPassport/Config`:
+
+- `HealthPassport.entitlements` enables the HealthKit capability.
+- `Info.plist` contains HealthKit share and update purpose strings.
+
 ## AI
 
 The coach is a wellness and data-explanation feature. It must not diagnose,
