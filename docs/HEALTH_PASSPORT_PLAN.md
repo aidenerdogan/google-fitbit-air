@@ -396,8 +396,11 @@ Steps:
 - `Done` 2026-06-08: Swift kit smoke tests passed with `swift run --package-path apps/ios/HealthPassport HealthPassportKitSmokeTests`.
 - `Done` 2026-06-08: SwiftUI app package rebuilt with `swift build --package-path apps/ios/HealthPassport`.
 - `Done` 2026-06-09: Added HealthKit permission/writeback client, entitlement and purpose-string templates, and writeback policy smoke tests.
+- `Done` 2026-06-13: Added `HealthPassport.xcodeproj`, shared app scheme, and beginner-friendly Xcode HealthKit setup notes.
+- `Done` 2026-06-13: Xcode project lists app and kit targets with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project apps/ios/HealthPassport/HealthPassport.xcodeproj -list`.
+- `Done` 2026-06-13: Xcode simulator build passed with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project apps/ios/HealthPassport/HealthPassport.xcodeproj -scheme HealthPassportApp -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`.
 - `Blocked` `swift test` is unavailable in the current Command Line Tools environment because the XCTest/Testing modules are not present.
-- `Blocked` Full iOS simulator, HealthKit entitlement, and App Store capability checks require full Xcode instead of Command Line Tools only.
+- `Blocked` Real HealthKit permission prompt validation still requires opening Xcode, choosing a signing team, and running the app.
 
 ## 6. Open Questions
 

@@ -13,6 +13,7 @@ This repository is in Phase 4: HealthKit permissions and writeback.
 - Shared open-core sync models: `packages/core`
 - Backend skeleton for Pro/backup/AI relay: `services/api`
 - Planning and privacy docs: `docs`
+- Xcode app project: `apps/ios/HealthPassport/HealthPassport.xcodeproj`
 - HealthKit entitlement and purpose-string templates: `apps/ios/HealthPassport/Config`
 
 ## Verification
@@ -28,3 +29,4 @@ swift build --package-path apps/ios/HealthPassport
 ```
 
 Full iOS simulator, HealthKit entitlement validation, and real permission prompts require Xcode.
+For the Xcode steps, see `docs/XCODE_HEALTHKIT_SETUP.md`.
