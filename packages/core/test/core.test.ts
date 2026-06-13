@@ -4,7 +4,11 @@ import assert from "node:assert/strict";
 import {
   appleHealthWriteSupport,
   analyzeMetricGaps,
+  createMvpOAuthScopePlans,
   createDefaultCapabilityMatrix,
+  fitbitLegacyScopesForMetrics,
+  googleHealthScopesForMetrics,
+  GOOGLE_HEALTH_SCOPES,
   createSyncReceipt,
   dedupeSamplesAgainstExisting,
   dedupeSamples,
@@ -181,4 +185,31 @@ test("detects missing metric days in a local analysis window", () => {
     "2026-06-13",
     "2026-06-14"
   ]);
+});
+
+test("plans Google Health read scopes for MVP import metrics", () => {
+  const scopes = googleHealthScopesForMetrics(["steps", "sleep", "heart_rate", "distance"]);
+
+  assert.deepEqual(scopes, [
+    GOOGLE_HEALTH_SCOPES.activityAndFitnessRead,
+    GOOGLE_HEALTH_SCOPES.healthMetricsRead,
+    GOOGLE_HEALTH_SCOPES.profileRead,
+    GOOGLE_HEALTH_SCOPES.sleepRead
+  ]);
+  assert.equal(scopes.some((scope) => scope.includes(".write")), false);
+});
+
+test("keeps legacy Fitbit scopes separate from Google Health scopes", () => {
+  assert.deepEqual(fitbitLegacyScopesForMetrics(["steps", "sleep", "heart_rate"]), [
+    "activity",
+    "heartrate",
+    "profile",
+    "sleep"
+  ]);
+
+  const plans = createMvpOAuthScopePlans();
+  assert.equal(plans[0]?.providerId, "google_health");
+  assert.equal(plans[0]?.flow, "authorization_code_pkce");
+  assert.equal(plans[0]?.requiresClientSecret, false);
+  assert.equal(plans[1]?.providerId, "fitbit_web_api_legacy");
 });
