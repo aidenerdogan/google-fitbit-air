@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createHealthPassportApi } from "../src/server.ts";
+import { findRawHealthDataPaths, type PrivacyAuditEvent } from "../src/privacy.ts";
 
 test("health endpoint returns service status", async () => {
   const { baseUrl, close } = await startTestServer();
@@ -73,9 +74,46 @@ test("AI relay accepts summary context placeholders", async () => {
   }
 });
 
-async function startTestServer() {
+test("privacy audit events never include raw health values", async () => {
+  const auditEvents: PrivacyAuditEvent[] = [];
+  const { baseUrl, close } = await startTestServer(auditEvents);
+  try {
+    const response = await fetch(`${baseUrl}/ai/context-packs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userApproved: true,
+        samples: [{ metric: "heart_rate", value: 72, externalId: "hr-secret-1" }]
+      })
+    });
+
+    assert.equal(response.status, 400);
+    assert.equal(auditEvents.length, 1);
+    assert.deepEqual(auditEvents[0]?.redactedFields, ["samples"]);
+    assert.equal(JSON.stringify(auditEvents[0]).includes("heart_rate"), false);
+    assert.equal(JSON.stringify(auditEvents[0]).includes("hr-secret-1"), false);
+    assert.equal(JSON.stringify(auditEvents[0]).includes("72"), false);
+  } finally {
+    await close();
+  }
+});
+
+test("raw health data detection reports nested field paths", () => {
+  const paths = findRawHealthDataPaths({
+    userApproved: true,
+    contextPack: {
+      trends: ["Sleep average changed."],
+      rawSamples: [{ metric: "sleep", value: "asleep" }]
+    }
+  });
+
+  assert.deepEqual(paths, ["contextPack.rawSamples"]);
+});
+
+async function startTestServer(auditEvents: PrivacyAuditEvent[] = []) {
   const server = createHealthPassportApi({
-    now: () => new Date("2026-06-05T00:00:00Z")
+    now: () => new Date("2026-06-05T00:00:00Z"),
+    auditSink: (event) => auditEvents.push(event)
   });
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
