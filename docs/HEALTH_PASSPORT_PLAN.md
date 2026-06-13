@@ -7,6 +7,11 @@ Status legend:
 - `Blocked`: Waiting for a decision, account, approval, API access, or external action.
 - `Done`: Completed and verified.
 
+Build loop:
+
+- Use `docs/DEVELOPMENT_LOOP.md` as the operating loop for each slice: plan, implement, test, review, commit, merge, and update this tracker.
+- Current priority: finish the HealthKit writeback receipt loop before starting real Fitbit/Google OAuth.
+
 ## 1. Product Goal
 
 Health Passport is a privacy-first app that helps people keep a clean, continuous health and activity record when they use Fitbit/Google wearables, switch devices, change memberships, or use more than one health app.
