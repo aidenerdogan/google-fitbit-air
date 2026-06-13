@@ -36,6 +36,30 @@ struct ContinuitySummary: Hashable {
     let gapsDetected: Int
 }
 
+struct PassportFilterOption: Identifiable, Hashable {
+    let id: String
+    let label: String
+    let metric: VaultMetric?
+    let sourceProvider: String?
+}
+
+struct PassportTimelineDay: Identifiable, Hashable {
+    let id: String
+    let date: Date
+    let items: [PassportTimelineItem]
+}
+
+struct PassportTimelineItem: Identifiable, Hashable {
+    let id: String
+    let date: Date
+    let title: String
+    let source: String
+    let confidence: String
+    let value: String
+    let status: String
+    let statusKind: MetricStatus
+}
+
 enum DemoData {
     static let metrics: [PassportMetric] = [
         PassportMetric(
@@ -117,6 +141,8 @@ final class HealthPassportAppState: ObservableObject {
     @Published var isImportingFitbitFixture = false
     @Published var loopStatusMessage = "No writeback loop has run yet."
     @Published var fitbitImportStatusMessage = "No Fitbit fixture has been imported yet."
+    @Published var passportMetricFilter: VaultMetric?
+    @Published var passportSourceFilter: String?
 
     private let vaultStore: EncryptedVaultStore?
     private let healthClient: HealthWritebackClient
@@ -195,12 +221,77 @@ final class HealthPassportAppState: ObservableObject {
         }
     }
 
+    var passportMetricFilterOptions: [PassportFilterOption] {
+        let presentMetrics = Array(Set(vaultSnapshot.samples.map(\.metric)))
+            .sorted { $0.passportDisplayName < $1.passportDisplayName }
+        return presentMetrics.map { metric in
+            PassportFilterOption(
+                id: metric.rawValue,
+                label: metric.passportDisplayName,
+                metric: metric,
+                sourceProvider: nil
+            )
+        }
+    }
+
+    var passportSourceFilterOptions: [PassportFilterOption] {
+        let providers = Array(Set(vaultSnapshot.samples.map(\.source.provider)))
+            .sorted { $0.passportSourceDisplayName < $1.passportSourceDisplayName }
+        return providers.map { provider in
+            PassportFilterOption(
+                id: provider,
+                label: provider.passportSourceDisplayName,
+                metric: nil,
+                sourceProvider: provider
+            )
+        }
+    }
+
+    var selectedPassportMetricFilterLabel: String {
+        passportMetricFilter?.passportDisplayName ?? "All metrics"
+    }
+
+    var selectedPassportSourceFilterLabel: String {
+        passportSourceFilter?.passportSourceDisplayName ?? "All sources"
+    }
+
+    var passportTimelineDays: [PassportTimelineDay] {
+        let filteredSamples = vaultSnapshot.samples
+            .filter { sample in
+                (passportMetricFilter == nil || sample.metric == passportMetricFilter) &&
+                    (passportSourceFilter == nil || sample.source.provider == passportSourceFilter)
+            }
+            .sorted { $0.startAt > $1.startAt }
+
+        let grouped = Dictionary(grouping: filteredSamples) { sample in
+            PassportGapAnalyzer.utcCalendar.startOfDay(for: sample.startAt)
+        }
+
+        return grouped.keys
+            .sorted(by: >)
+            .map { day in
+                let items = (grouped[day] ?? [])
+                    .sorted { $0.startAt > $1.startAt }
+                    .map(timelineItem(for:))
+                return PassportTimelineDay(
+                    id: String(Int(day.timeIntervalSince1970)),
+                    date: day,
+                    items: items
+                )
+            }
+    }
+
     var vaultSourceCount: Int {
         vaultSnapshot.sources.count
     }
 
     private var passportGapAnalysis: PassportGapAnalysis {
         PassportGapAnalyzer.analyze(snapshot: vaultSnapshot)
+    }
+
+    func clearPassportFilters() {
+        passportMetricFilter = nil
+        passportSourceFilter = nil
     }
 
     func loadVault() {
@@ -347,6 +438,65 @@ final class HealthPassportAppState: ObservableObject {
             return "Preserved in Passport, not written to Apple Health until mapping is reviewed."
         }
     }
+
+    private func timelineItem(for sample: VaultSample) -> PassportTimelineItem {
+        let decision = AppleHealthWritebackPolicy.decision(for: sample)
+        return PassportTimelineItem(
+            id: sample.id,
+            date: sample.startAt,
+            title: sample.metric.passportDisplayName,
+            source: sample.source.provider.passportSourceDisplayName,
+            confidence: sample.confidence.passportDisplayName,
+            value: valueLabel(for: sample),
+            status: timelineStatusLabel(for: decision),
+            statusKind: timelineStatusKind(for: decision)
+        )
+    }
+
+    private func valueLabel(for sample: VaultSample) -> String {
+        if let numericValue = sample.numericValue {
+            let value: String
+            if numericValue.rounded() == numericValue {
+                value = "\(Int(numericValue))"
+            } else {
+                value = numericValue.formatted(.number.precision(.fractionLength(1)))
+            }
+
+            if let unit = sample.unit {
+                return "\(value) \(unit)"
+            }
+
+            return value
+        }
+
+        if let textValue = sample.textValue {
+            return textValue.capitalized
+        }
+
+        return "No value"
+    }
+
+    private func timelineStatusLabel(for decision: AppleHealthWritebackDecision) -> String {
+        switch decision.readiness {
+        case .writeable:
+            return "Ready for writeback"
+        case .passportOnly:
+            return "Passport only"
+        case .invalid:
+            return "Needs value"
+        }
+    }
+
+    private func timelineStatusKind(for decision: AppleHealthWritebackDecision) -> MetricStatus {
+        switch decision.readiness {
+        case .writeable:
+            return .ready
+        case .passportOnly:
+            return .unsupported
+        case .invalid:
+            return .blocked
+        }
+    }
 }
 
 private extension VaultMetric {
@@ -385,6 +535,19 @@ private extension String {
             return "Health Passport"
         default:
             return self
+        }
+    }
+}
+
+private extension SampleConfidence {
+    var passportDisplayName: String {
+        switch self {
+        case .high:
+            return "High confidence"
+        case .medium:
+            return "Medium confidence"
+        case .low:
+            return "Low confidence"
         }
     }
 }
