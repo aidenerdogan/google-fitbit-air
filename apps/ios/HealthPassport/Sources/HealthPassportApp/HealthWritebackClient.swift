@@ -385,7 +385,7 @@ enum HealthWritebackError: LocalizedError {
 #if os(iOS) && canImport(HealthKit)
 private extension HKHealthStore {
     func requestAuthorization(toShare shareTypes: Set<HKSampleType>, read readTypes: Set<HKObjectType>) async throws {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             requestAuthorization(toShare: shareTypes, read: readTypes) { success, error in
                 if let error {
                     continuation.resume(throwing: error)
@@ -399,7 +399,7 @@ private extension HKHealthStore {
     }
 
     func save(_ sample: HKSample) async throws {
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             save(sample) { success, error in
                 if let error {
                     continuation.resume(throwing: error)
