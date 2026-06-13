@@ -122,8 +122,8 @@ Done when:
 - `Done` Define requested read and write data types.
 - `Done` Ask for permissions with clear purpose text.
 - `Done` Handle denied and partially granted permissions.
-- `In Progress` Write supported samples to Apple Health. Code path exists; simulator/device validation is still required.
-- `In Progress` Record HealthKit write results in sync receipts. Writeback receipt models exist; persistence into vault receipts is still required.
+- `In Progress` Write supported samples to Apple Health. Development sample loop exists; simulator/device tap validation is still required.
+- `Done` Record HealthKit write results in sync receipts.
 
 Done when:
 
@@ -153,8 +153,8 @@ Done when:
 - `Todo` Detect duplicate workouts.
 - `Todo` Detect overlapping samples.
 - `Todo` Detect missing days or missing metric ranges.
-- `Todo` Create sync receipts with imported, written, skipped, unsupported, and failed counts.
-- `Todo` Show receipts in the app.
+- `In Progress` Create sync receipts with imported, written, skipped, unsupported, and failed counts.
+- `In Progress` Show receipts in the app.
 
 Done when:
 
@@ -352,11 +352,11 @@ Steps:
 
 ### HealthKit Permission Tests
 
-- `Todo` All permissions granted.
+- `Done` All permissions granted.
 - `Todo` Some permissions denied.
 - `Todo` All permissions denied.
 - `Todo` Permissions revoked after first sync.
-- `Todo` Unsupported data type skipped safely.
+- `In Progress` Unsupported data type skipped safely.
 
 ### Fitbit Fixture Tests
 
@@ -404,8 +404,10 @@ Steps:
 - `Done` 2026-06-13: Added `HealthPassport.xcodeproj`, shared app scheme, and beginner-friendly Xcode HealthKit setup notes.
 - `Done` 2026-06-13: Xcode project lists app and kit targets with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project apps/ios/HealthPassport/HealthPassport.xcodeproj -list`.
 - `Done` 2026-06-13: Xcode simulator build passed with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project apps/ios/HealthPassport/HealthPassport.xcodeproj -scheme HealthPassportApp -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`.
+- `Done` 2026-06-13: Simulator screenshot confirmed Apple Health writeback permissions reached `granted`.
+- `Done` 2026-06-13: Added development HealthKit writeback receipt loop: fake samples, encrypted vault save, Apple Health write attempt, vault receipt persistence, and receipt UI.
 - `Blocked` `swift test` is unavailable in the current Command Line Tools environment because the XCTest/Testing modules are not present.
-- `Blocked` Real HealthKit permission prompt validation still requires opening Xcode, choosing a signing team, and running the app.
+- `Blocked` Real HealthKit sample writeback validation still requires tapping `Run Sample Writeback` in the simulator or on a device.
 
 ## 6. Open Questions
 

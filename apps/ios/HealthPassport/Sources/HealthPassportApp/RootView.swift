@@ -2,18 +2,19 @@ import SwiftUI
 
 struct RootView: View {
     @State private var selectedSection: PassportSection = .passport
+    @StateObject private var appState = HealthPassportAppState.live()
 
     var body: some View {
         TabView(selection: $selectedSection) {
-            PassportView()
+            PassportView(appState: appState)
                 .tabItem { Text("Passport") }
                 .tag(PassportSection.passport)
 
-            SourcesView()
+            SourcesView(appState: appState)
                 .tabItem { Text("Sources") }
                 .tag(PassportSection.sources)
 
-            ReceiptsView()
+            ReceiptsView(appState: appState)
                 .tabItem { Text("Receipts") }
                 .tag(PassportSection.receipts)
 
@@ -21,7 +22,7 @@ struct RootView: View {
                 .tabItem { Text("Coach") }
                 .tag(PassportSection.coach)
 
-            SettingsView()
+            SettingsView(appState: appState)
                 .tabItem { Text("Settings") }
                 .tag(PassportSection.settings)
         }

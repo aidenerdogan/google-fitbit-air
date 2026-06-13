@@ -93,8 +93,10 @@ public struct VaultReceipt: Codable, Identifiable, Hashable, Sendable {
     public let finishedAt: Date
     public let imported: Int
     public let writtenToAppleHealth: Int
+    public let skippedWriteback: Int
     public let skippedDuplicates: Int
     public let gapsDetected: Int
+    public let failedToAppleHealth: Int
     public let unsupportedMetrics: [VaultMetric]
 
     public init(
@@ -104,8 +106,10 @@ public struct VaultReceipt: Codable, Identifiable, Hashable, Sendable {
         finishedAt: Date,
         imported: Int,
         writtenToAppleHealth: Int,
+        skippedWriteback: Int = 0,
         skippedDuplicates: Int = 0,
         gapsDetected: Int = 0,
+        failedToAppleHealth: Int = 0,
         unsupportedMetrics: [VaultMetric] = []
     ) {
         self.id = id
@@ -114,9 +118,56 @@ public struct VaultReceipt: Codable, Identifiable, Hashable, Sendable {
         self.finishedAt = finishedAt
         self.imported = imported
         self.writtenToAppleHealth = writtenToAppleHealth
+        self.skippedWriteback = skippedWriteback
         self.skippedDuplicates = skippedDuplicates
         self.gapsDetected = gapsDetected
+        self.failedToAppleHealth = failedToAppleHealth
         self.unsupportedMetrics = Array(Set(unsupportedMetrics)).sorted { $0.rawValue < $1.rawValue }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case sourceId
+        case startedAt
+        case finishedAt
+        case imported
+        case writtenToAppleHealth
+        case skippedWriteback
+        case skippedDuplicates
+        case gapsDetected
+        case failedToAppleHealth
+        case unsupportedMetrics
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.sourceId = try container.decode(String.self, forKey: .sourceId)
+        self.startedAt = try container.decode(Date.self, forKey: .startedAt)
+        self.finishedAt = try container.decode(Date.self, forKey: .finishedAt)
+        self.imported = try container.decode(Int.self, forKey: .imported)
+        self.writtenToAppleHealth = try container.decode(Int.self, forKey: .writtenToAppleHealth)
+        self.skippedWriteback = try container.decodeIfPresent(Int.self, forKey: .skippedWriteback) ?? 0
+        self.skippedDuplicates = try container.decodeIfPresent(Int.self, forKey: .skippedDuplicates) ?? 0
+        self.gapsDetected = try container.decodeIfPresent(Int.self, forKey: .gapsDetected) ?? 0
+        self.failedToAppleHealth = try container.decodeIfPresent(Int.self, forKey: .failedToAppleHealth) ?? 0
+        let unsupportedMetrics = try container.decodeIfPresent([VaultMetric].self, forKey: .unsupportedMetrics) ?? []
+        self.unsupportedMetrics = Array(Set(unsupportedMetrics)).sorted { $0.rawValue < $1.rawValue }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(sourceId, forKey: .sourceId)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encode(finishedAt, forKey: .finishedAt)
+        try container.encode(imported, forKey: .imported)
+        try container.encode(writtenToAppleHealth, forKey: .writtenToAppleHealth)
+        try container.encode(skippedWriteback, forKey: .skippedWriteback)
+        try container.encode(skippedDuplicates, forKey: .skippedDuplicates)
+        try container.encode(gapsDetected, forKey: .gapsDetected)
+        try container.encode(failedToAppleHealth, forKey: .failedToAppleHealth)
+        try container.encode(unsupportedMetrics, forKey: .unsupportedMetrics)
     }
 }
 
