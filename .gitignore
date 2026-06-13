@@ -10,6 +10,7 @@ coverage/
 *.xcuserstate
 xcuserdata/
 DerivedData/
+.project/
 *.log
 *.sqlite
 *.sqlite-shm
