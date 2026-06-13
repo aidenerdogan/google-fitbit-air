@@ -118,11 +118,11 @@ Done when:
 
 ### Phase 4: HealthKit Permissions And Writeback
 
-- `In Progress` Add HealthKit capability to the iOS app. Code/config templates exist; Xcode capability must still be attached manually.
+- `Done` Add HealthKit capability to the iOS app.
 - `Done` Define requested read and write data types.
 - `Done` Ask for permissions with clear purpose text.
 - `Done` Handle denied and partially granted permissions.
-- `In Progress` Write supported samples to Apple Health. Development sample loop exists; simulator/device tap validation is still required.
+- `Done` Write supported samples to Apple Health in the simulator development loop.
 - `Done` Record HealthKit write results in sync receipts.
 
 Done when:
@@ -406,8 +406,9 @@ Steps:
 - `Done` 2026-06-13: Xcode simulator build passed with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project apps/ios/HealthPassport/HealthPassport.xcodeproj -scheme HealthPassportApp -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`.
 - `Done` 2026-06-13: Simulator screenshot confirmed Apple Health writeback permissions reached `granted`.
 - `Done` 2026-06-13: Added development HealthKit writeback receipt loop: fake samples, encrypted vault save, Apple Health write attempt, vault receipt persistence, and receipt UI.
+- `Done` 2026-06-13: Manual simulator run confirmed receipt result: 4 imported, 2 written, 1 skipped, 1 unsupported, and 0 failed.
 - `Blocked` `swift test` is unavailable in the current Command Line Tools environment because the XCTest/Testing modules are not present.
-- `Blocked` Real HealthKit sample writeback validation still requires tapping `Run Sample Writeback` in the simulator or on a device.
+- `Blocked` Real device HealthKit sample writeback validation still requires running on an iPhone.
 
 ## 6. Open Questions
 
