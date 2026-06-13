@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   appleHealthWriteSupport,
+  analyzeMetricGaps,
   createDefaultCapabilityMatrix,
   createSyncReceipt,
   dedupeSamplesAgainstExisting,
@@ -138,4 +139,46 @@ test("dedupes Fitbit fixture imports against existing vault samples", async () =
   assert.equal(firstBatch.samples.length, 7);
   assert.equal(result.accepted.length, 0);
   assert.equal(result.duplicates.length, 7);
+});
+
+test("detects missing metric days in a local analysis window", () => {
+  const stepsFirstDay = normalizeSample({
+    metric: "steps",
+    startAt: "2026-06-13T07:00:00Z",
+    endAt: "2026-06-13T08:00:00Z",
+    value: 1280,
+    source: { provider: "fitbit" },
+    externalId: "steps-day-1"
+  });
+  const stepsSecondDay = normalizeSample({
+    metric: "steps",
+    startAt: "2026-06-14T07:00:00Z",
+    endAt: "2026-06-14T08:00:00Z",
+    value: 1320,
+    source: { provider: "fitbit" },
+    externalId: "steps-day-2"
+  });
+  const sleepFirstDay = normalizeSample({
+    metric: "sleep",
+    startAt: "2026-06-12T22:00:00Z",
+    endAt: "2026-06-13T05:30:00Z",
+    value: "asleep",
+    source: { provider: "fitbit" },
+    externalId: "sleep-day-1"
+  });
+
+  const analysis = analyzeMetricGaps({
+    samples: [stepsFirstDay, stepsSecondDay, sleepFirstDay],
+    metrics: ["steps", "sleep", "workout"],
+    startAt: "2026-06-13T00:00:00Z",
+    endAt: "2026-06-14T23:59:00Z"
+  });
+
+  assert.equal(analysis.totalMissingDays, 3);
+  assert.equal(analysis.metrics.find((metric) => metric.metric === "steps")?.status, "ready");
+  assert.deepEqual(analysis.metrics.find((metric) => metric.metric === "sleep")?.missingDays, ["2026-06-14"]);
+  assert.deepEqual(analysis.metrics.find((metric) => metric.metric === "workout")?.missingDays, [
+    "2026-06-13",
+    "2026-06-14"
+  ]);
 });

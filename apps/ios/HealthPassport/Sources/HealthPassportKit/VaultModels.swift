@@ -199,3 +199,158 @@ public struct VaultSnapshot: Codable, Equatable, Sendable {
         VaultSnapshot()
     }
 }
+
+public enum PassportMetricCoverageStatus: String, Codable, Sendable {
+    case ready
+    case gap
+    case blocked
+    case passportOnly
+}
+
+public struct PassportMetricCoverage: Identifiable, Hashable, Sendable {
+    public var id: String { metric.rawValue }
+
+    public let metric: VaultMetric
+    public let status: PassportMetricCoverageStatus
+    public let sampleCount: Int
+    public let sourceProviders: [String]
+    public let firstSampleAt: Date?
+    public let lastSampleAt: Date?
+    public let missingDays: [Date]
+
+    public init(
+        metric: VaultMetric,
+        status: PassportMetricCoverageStatus,
+        sampleCount: Int,
+        sourceProviders: [String],
+        firstSampleAt: Date?,
+        lastSampleAt: Date?,
+        missingDays: [Date]
+    ) {
+        self.metric = metric
+        self.status = status
+        self.sampleCount = sampleCount
+        self.sourceProviders = sourceProviders
+        self.firstSampleAt = firstSampleAt
+        self.lastSampleAt = lastSampleAt
+        self.missingDays = missingDays
+    }
+}
+
+public struct PassportGapAnalysis: Hashable, Sendable {
+    public let windowStart: Date
+    public let windowEnd: Date
+    public let metrics: [PassportMetricCoverage]
+
+    public init(windowStart: Date, windowEnd: Date, metrics: [PassportMetricCoverage]) {
+        self.windowStart = windowStart
+        self.windowEnd = windowEnd
+        self.metrics = metrics
+    }
+
+    public var totalMissingDays: Int {
+        metrics.reduce(0) { $0 + $1.missingDays.count }
+    }
+
+    public var readyMetricCount: Int {
+        metrics.filter { $0.status == .ready || $0.status == .passportOnly }.count
+    }
+
+    public var continuityScore: Int {
+        guard !metrics.isEmpty else { return 0 }
+        return Int((Double(readyMetricCount) / Double(metrics.count) * 100).rounded())
+    }
+}
+
+public enum PassportGapAnalyzer {
+    public static let defaultMetrics: [VaultMetric] = [
+        .steps,
+        .workout,
+        .sleep,
+        .heartRate,
+        .restingHeartRate,
+        .activeEnergy,
+        .distance,
+        .hrvRmssd
+    ]
+
+    public static func analyze(
+        snapshot: VaultSnapshot,
+        metrics: [VaultMetric] = defaultMetrics,
+        windowStart: Date? = nil,
+        windowEnd: Date? = nil,
+        calendar: Calendar = utcCalendar
+    ) -> PassportGapAnalysis {
+        let inferredStart = windowStart ?? snapshot.samples.map(\.startAt).min() ?? calendar.startOfDay(for: windowEnd ?? Date())
+        let inferredEnd = windowEnd ?? snapshot.samples.map { $0.endAt ?? $0.startAt }.max() ?? inferredStart
+        let dayStarts = dayStartsBetween(inferredStart, and: inferredEnd, calendar: calendar)
+
+        let coverages = metrics.map { metric in
+            let metricSamples = snapshot.samples
+                .filter { $0.metric == metric }
+                .sorted { $0.startAt < $1.startAt }
+            let missingDays = dayStarts.filter { dayStart in
+                !metricSamples.contains { sample in
+                    sampleOverlaps(sample, dayStart: dayStart, calendar: calendar)
+                }
+            }
+            let sourceProviders = Array(Set(metricSamples.map(\.source.provider))).sorted()
+            let status = coverageStatus(for: metric, sampleCount: metricSamples.count, missingDayCount: missingDays.count)
+
+            return PassportMetricCoverage(
+                metric: metric,
+                status: status,
+                sampleCount: metricSamples.count,
+                sourceProviders: sourceProviders,
+                firstSampleAt: metricSamples.first?.startAt,
+                lastSampleAt: metricSamples.last.map { $0.endAt ?? $0.startAt },
+                missingDays: missingDays
+            )
+        }
+
+        return PassportGapAnalysis(windowStart: inferredStart, windowEnd: inferredEnd, metrics: coverages)
+    }
+
+    public static let utcCalendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        return calendar
+    }()
+
+    private static func coverageStatus(
+        for metric: VaultMetric,
+        sampleCount: Int,
+        missingDayCount: Int
+    ) -> PassportMetricCoverageStatus {
+        if metric == .hrvRmssd || metric == .hrvSdnn {
+            return sampleCount > 0 ? .passportOnly : .blocked
+        }
+        if sampleCount == 0 {
+            return .blocked
+        }
+        return missingDayCount > 0 ? .gap : .ready
+    }
+
+    private static func dayStartsBetween(_ start: Date, and end: Date, calendar: Calendar) -> [Date] {
+        var days: [Date] = []
+        var cursor = calendar.startOfDay(for: start)
+        let finalDay = calendar.startOfDay(for: end)
+
+        while cursor <= finalDay {
+            days.append(cursor)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+
+        return days
+    }
+
+    private static func sampleOverlaps(_ sample: VaultSample, dayStart: Date, calendar: Calendar) -> Bool {
+        guard let dayEnd = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: dayStart) else {
+            return false
+        }
+
+        let sampleEnd = sample.endAt ?? sample.startAt
+        return sample.startAt <= dayEnd && sampleEnd >= dayStart
+    }
+}

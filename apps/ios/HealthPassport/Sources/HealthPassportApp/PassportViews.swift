@@ -11,25 +11,17 @@ struct PassportView: View {
                 }
 
                 Section {
-                    ContinuityPanel(score: continuityScore, status: continuityStatus)
+                    ContinuityPanel(summary: appState.continuitySummary)
                 }
 
                 Section("Metric readiness") {
-                    ForEach(DemoData.metrics) { metric in
+                    ForEach(appState.passportMetricSummaries) { metric in
                         MetricRow(metric: metric)
                     }
                 }
             }
             .navigationTitle("Health Passport")
         }
-    }
-
-    private var continuityScore: Int {
-        min(100, appState.vaultSnapshot.samples.count * 12)
-    }
-
-    private var continuityStatus: String {
-        appState.vaultSnapshot.samples.isEmpty ? "Not connected" : "\(appState.vaultSnapshot.samples.count) local samples"
     }
 }
 
@@ -210,16 +202,15 @@ private struct EmptyStatePanel: View {
 }
 
 private struct ContinuityPanel: View {
-    let score: Int
-    let status: String
+    let summary: ContinuitySummary
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Continuity Score")
                 .font(.headline)
-            Text("\(score)")
+            Text("\(summary.score)")
                 .font(.system(size: 44, weight: .semibold, design: .rounded))
-            Text(status)
+            Text(summary.status)
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 8)

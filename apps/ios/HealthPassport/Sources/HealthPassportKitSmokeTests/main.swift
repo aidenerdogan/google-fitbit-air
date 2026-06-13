@@ -7,6 +7,7 @@ try runAppleHealthWritebackReceiptMappingSmokeTests()
 try runLegacyVaultReceiptDecodeSmokeTests()
 try runFitbitFixtureImportReceiptSmokeTests()
 try runDuplicateImportReceiptSmokeTests()
+try runPassportGapAnalysisSmokeTests()
 print("HealthPassportKitSmokeTests passed")
 
 private func runEncryptedVaultSmokeTests() throws {
@@ -206,6 +207,52 @@ private func runDuplicateImportReceiptSmokeTests() throws {
 
     assert(receipt.imported == 0, "Repeat fixture import should not accept duplicates")
     assert(receipt.skippedDuplicates == 7, "Repeat fixture import should record skipped duplicates")
+}
+
+private func runPassportGapAnalysisSmokeTests() throws {
+    let source = SourceReference(provider: "fitbit", deviceModel: "Fitbit Fixture")
+    let dayOneSteps = VaultSample(
+        id: "steps-1",
+        metric: .steps,
+        startAt: Date(timeIntervalSince1970: 1_781_337_600),
+        endAt: Date(timeIntervalSince1970: 1_781_341_200),
+        numericValue: 1_200,
+        source: source
+    )
+    let dayTwoSteps = VaultSample(
+        id: "steps-2",
+        metric: .steps,
+        startAt: Date(timeIntervalSince1970: 1_781_424_000),
+        endAt: Date(timeIntervalSince1970: 1_781_427_600),
+        numericValue: 1_320,
+        source: source
+    )
+    let dayOneSleep = VaultSample(
+        id: "sleep-1",
+        metric: .sleep,
+        startAt: Date(timeIntervalSince1970: 1_781_290_800),
+        endAt: Date(timeIntervalSince1970: 1_781_317_800),
+        textValue: "asleep",
+        source: source
+    )
+    let snapshot = VaultSnapshot(samples: [dayOneSteps, dayTwoSteps, dayOneSleep])
+    let analysis = PassportGapAnalyzer.analyze(
+        snapshot: snapshot,
+        metrics: [.steps, .sleep, .workout],
+        windowStart: Date(timeIntervalSince1970: 1_781_308_800),
+        windowEnd: Date(timeIntervalSince1970: 1_781_481_540)
+    )
+
+    let steps = analysis.metrics.first { $0.metric == .steps }
+    let sleep = analysis.metrics.first { $0.metric == .sleep }
+    let workout = analysis.metrics.first { $0.metric == .workout }
+
+    assert(analysis.totalMissingDays == 3, "Gap analysis should count missing metric days")
+    assert(steps?.status == .ready, "Steps should cover both test days")
+    assert(sleep?.status == .gap, "Sleep should show a missing second day")
+    assert(sleep?.missingDays.count == 1, "Sleep should miss exactly one day")
+    assert(workout?.status == .blocked, "Workout should be blocked without samples")
+    assert(workout?.missingDays.count == 2, "Workout should miss both days")
 }
 
 private func temporaryVaultURL() -> URL {
