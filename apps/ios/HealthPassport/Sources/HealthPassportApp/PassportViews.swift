@@ -1,3 +1,4 @@
+import HealthPassportKit
 import SwiftUI
 
 struct PassportView: View {
@@ -19,9 +20,161 @@ struct PassportView: View {
                         MetricRow(metric: metric)
                     }
                 }
+
+                Section("Timeline") {
+                    PassportFilterPanel(appState: appState)
+
+                    if appState.passportTimelineDays.isEmpty {
+                        EmptyStatePanel(
+                            title: "No samples match these filters",
+                            detail: "Import a source or clear filters to see preserved records."
+                        )
+                    } else {
+                        ForEach(appState.passportTimelineDays) { day in
+                            TimelineDayPanel(day: day)
+                        }
+                    }
+                }
             }
             .navigationTitle("Health Passport")
         }
+    }
+}
+
+private struct PassportFilterPanel: View {
+    @ObservedObject var appState: HealthPassportAppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Menu {
+                    Button("All metrics") {
+                        appState.passportMetricFilter = nil
+                    }
+
+                    ForEach(appState.passportMetricFilterOptions) { option in
+                        Button(option.label) {
+                            appState.passportMetricFilter = option.metric
+                        }
+                    }
+                } label: {
+                    Text(appState.selectedPassportMetricFilterLabel)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Menu {
+                    Button("All sources") {
+                        appState.passportSourceFilter = nil
+                    }
+
+                    ForEach(appState.passportSourceFilterOptions) { option in
+                        Button(option.label) {
+                            appState.passportSourceFilter = option.sourceProvider
+                        }
+                    }
+                } label: {
+                    Text(appState.selectedPassportSourceFilterLabel)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if appState.passportMetricFilter != nil || appState.passportSourceFilter != nil {
+                Button("Clear Filters") {
+                    appState.clearPassportFilters()
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct TimelineDayPanel: View {
+    let day: PassportTimelineDay
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(day.date, format: .dateTime.weekday(.wide).month().day())
+                .font(.headline)
+
+            ForEach(day.items) { item in
+                TimelineItemRow(item: item)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct TimelineItemRow: View {
+    let item: PassportTimelineItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(item.title)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(item.date, format: .dateTime.hour().minute())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    TimelineBadge(text: item.source, color: .blue)
+                    TimelineBadge(text: item.confidence, color: confidenceColor)
+                }
+
+                TimelineBadge(text: item.status, color: statusColor)
+            }
+
+            Text(item.value)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var confidenceColor: Color {
+        switch item.confidence {
+        case "High confidence":
+            return .green
+        case "Medium confidence":
+            return .orange
+        default:
+            return .gray
+        }
+    }
+
+    private var statusColor: Color {
+        switch item.statusKind {
+        case .ready:
+            return .green
+        case .gap:
+            return .orange
+        case .blocked:
+            return .red
+        case .unsupported:
+            return .gray
+        }
+    }
+}
+
+private struct TimelineBadge: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Text(text)
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 }
 
