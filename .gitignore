@@ -8,6 +8,7 @@ coverage/
 .env.*
 !.env.example
 *.xcuserstate
+xcuserdata/
 DerivedData/
 *.log
 *.sqlite
