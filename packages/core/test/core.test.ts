@@ -5,6 +5,7 @@ import {
   appleHealthWriteSupport,
   createDefaultCapabilityMatrix,
   createSyncReceipt,
+  dedupeSamplesAgainstExisting,
   dedupeSamples,
   FitbitFixtureConnector,
   mapFitbitFixtureError,
@@ -126,4 +127,15 @@ test("maps Fitbit fixture connector error scenarios", async () => {
   assert.equal(missingMetricBatch.samples.length > 0, true);
   assert.equal(missingMetricBatch.issues[0]?.code, "fitbit_missing_metric");
   assert.equal(missingMetricBatch.issues[0]?.metric, "sleep");
+});
+
+test("dedupes Fitbit fixture imports against existing vault samples", async () => {
+  const connector = new FitbitFixtureConnector({ importedAt: "2026-06-13T12:00:00Z" });
+  const firstBatch = await connector.sync({ sourceId: "fitbit" });
+  const secondBatch = await connector.sync({ sourceId: "fitbit" });
+  const result = dedupeSamplesAgainstExisting(firstBatch.samples, secondBatch.samples);
+
+  assert.equal(firstBatch.samples.length, 7);
+  assert.equal(result.accepted.length, 0);
+  assert.equal(result.duplicates.length, 7);
 });
