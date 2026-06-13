@@ -5,6 +5,7 @@ try runEncryptedVaultSmokeTests()
 try runAppleHealthWritebackPolicySmokeTests()
 try runAppleHealthWritebackReceiptMappingSmokeTests()
 try runLegacyVaultReceiptDecodeSmokeTests()
+try runFitbitFixtureImportReceiptSmokeTests()
 print("HealthPassportKitSmokeTests passed")
 
 private func runEncryptedVaultSmokeTests() throws {
@@ -172,6 +173,22 @@ private func runLegacyVaultReceiptDecodeSmokeTests() throws {
     let receipt = try decoder.decode(VaultReceipt.self, from: Data(json.utf8))
     assert(receipt.skippedWriteback == 0, "Legacy receipt should default skipped writeback to zero")
     assert(receipt.failedToAppleHealth == 0, "Legacy receipt should default failed writeback to zero")
+}
+
+private func runFitbitFixtureImportReceiptSmokeTests() throws {
+    let receipt = VaultReceipt(
+        id: "fitbit-import",
+        sourceId: "fitbit-fixture",
+        startedAt: Date(timeIntervalSince1970: 100),
+        finishedAt: Date(timeIntervalSince1970: 101),
+        imported: 7,
+        writtenToAppleHealth: 0,
+        unsupportedMetrics: [.hrvRmssd, .hrvRmssd]
+    )
+
+    assert(receipt.imported == 7, "Fitbit fixture import should count imported samples")
+    assert(receipt.writtenToAppleHealth == 0, "Fitbit fixture import should not write to Apple Health")
+    assert(receipt.unsupportedMetrics == [.hrvRmssd], "Unsupported metrics should be unique and sorted")
 }
 
 private func temporaryVaultURL() -> URL {

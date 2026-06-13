@@ -108,7 +108,9 @@ final class HealthPassportAppState: ObservableObject {
     @Published var permissionSnapshot = HealthPermissionSnapshot.notRequested
     @Published var isRequestingAppleHealth = false
     @Published var isRunningWritebackLoop = false
+    @Published var isImportingFitbitFixture = false
     @Published var loopStatusMessage = "No writeback loop has run yet."
+    @Published var fitbitImportStatusMessage = "No Fitbit fixture has been imported yet."
 
     private let vaultStore: EncryptedVaultStore?
     private let healthClient: HealthWritebackClient
@@ -232,6 +234,45 @@ final class HealthPassportAppState: ObservableObject {
             loopStatusMessage = "Writeback loop failed: \(error.localizedDescription)"
         }
     }
+
+    func importFitbitFixture() async {
+        guard let vaultStore else {
+            fitbitImportStatusMessage = startupError ?? "Local vault is unavailable."
+            return
+        }
+
+        isImportingFitbitFixture = true
+        fitbitImportStatusMessage = "Importing Fitbit fixture."
+        defer { isImportingFitbitFixture = false }
+
+        do {
+            var snapshot = try vaultStore.load()
+            let source = FitbitFixtureImport.source
+            if !snapshot.sources.contains(where: { $0.id == source.id }) {
+                snapshot.sources.append(source)
+            }
+
+            let samples = FitbitFixtureImport.makeSamples()
+            snapshot.samples.append(contentsOf: samples)
+            let receipt = VaultReceipt(
+                id: UUID().uuidString,
+                sourceId: source.id,
+                startedAt: Date(),
+                finishedAt: Date(),
+                imported: samples.count,
+                writtenToAppleHealth: 0,
+                skippedDuplicates: 0,
+                unsupportedMetrics: [.hrvRmssd]
+            )
+            snapshot.receipts.append(receipt)
+
+            try vaultStore.save(snapshot)
+            vaultSnapshot = try vaultStore.load()
+            fitbitImportStatusMessage = "Fitbit fixture imported into the local vault."
+        } catch {
+            fitbitImportStatusMessage = "Fitbit fixture import failed: \(error.localizedDescription)"
+        }
+    }
 }
 
 private enum DevelopmentHealthSamples {
@@ -292,6 +333,107 @@ private enum DevelopmentHealthSamples {
                 unit: "m",
                 source: sourceReference,
                 externalId: "dev-distance-invalid-\(runId)",
+                confidence: .low,
+                importedAt: now
+            )
+        ]
+    }
+}
+
+private enum FitbitFixtureImport {
+    static let source = VaultSource(
+        id: "fitbit-fixture",
+        displayName: "Fitbit Fixture",
+        provider: "fitbit",
+        connectedAt: Date(timeIntervalSince1970: 1_771_200_000)
+    )
+
+    static func makeSamples(now: Date = Date()) -> [VaultSample] {
+        let runId = UUID().uuidString
+        let sourceReference = SourceReference(provider: source.provider, deviceModel: "Fitbit Fixture", appName: "Health Passport")
+        let morningStart = now.addingTimeInterval(-12_000)
+        let morningEnd = now.addingTimeInterval(-8_400)
+        let sleepStart = now.addingTimeInterval(-36_000)
+        let sleepEnd = now.addingTimeInterval(-9_000)
+
+        return [
+            VaultSample(
+                id: "fitbit-steps-\(runId)",
+                metric: .steps,
+                startAt: morningStart,
+                endAt: morningEnd,
+                numericValue: 1_280,
+                unit: "count",
+                source: sourceReference,
+                externalId: "fitbit-fixture-steps-\(runId)",
+                confidence: .high,
+                importedAt: now
+            ),
+            VaultSample(
+                id: "fitbit-sleep-\(runId)",
+                metric: .sleep,
+                startAt: sleepStart,
+                endAt: sleepEnd,
+                textValue: "asleep",
+                source: sourceReference,
+                externalId: "fitbit-fixture-sleep-\(runId)",
+                confidence: .medium,
+                importedAt: now
+            ),
+            VaultSample(
+                id: "fitbit-heart-rate-\(runId)",
+                metric: .heartRate,
+                startAt: morningEnd,
+                numericValue: 72,
+                unit: "count/min",
+                source: sourceReference,
+                externalId: "fitbit-fixture-hr-\(runId)",
+                confidence: .high,
+                importedAt: now
+            ),
+            VaultSample(
+                id: "fitbit-resting-heart-rate-\(runId)",
+                metric: .restingHeartRate,
+                startAt: sleepEnd,
+                numericValue: 58,
+                unit: "count/min",
+                source: sourceReference,
+                externalId: "fitbit-fixture-rhr-\(runId)",
+                confidence: .medium,
+                importedAt: now
+            ),
+            VaultSample(
+                id: "fitbit-active-energy-\(runId)",
+                metric: .activeEnergy,
+                startAt: morningStart,
+                endAt: morningEnd,
+                numericValue: 86,
+                unit: "kcal",
+                source: sourceReference,
+                externalId: "fitbit-fixture-energy-\(runId)",
+                confidence: .high,
+                importedAt: now
+            ),
+            VaultSample(
+                id: "fitbit-distance-\(runId)",
+                metric: .distance,
+                startAt: morningStart,
+                endAt: morningEnd,
+                numericValue: 920,
+                unit: "m",
+                source: sourceReference,
+                externalId: "fitbit-fixture-distance-\(runId)",
+                confidence: .high,
+                importedAt: now
+            ),
+            VaultSample(
+                id: "fitbit-hrv-rmssd-\(runId)",
+                metric: .hrvRmssd,
+                startAt: sleepEnd,
+                numericValue: 44,
+                unit: "ms",
+                source: sourceReference,
+                externalId: "fitbit-fixture-hrv-rmssd-\(runId)",
                 confidence: .low,
                 importedAt: now
             )
