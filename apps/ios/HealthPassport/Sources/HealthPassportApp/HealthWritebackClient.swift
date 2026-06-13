@@ -5,6 +5,7 @@ import HealthPassportKit
 import HealthKit
 #endif
 
+@MainActor
 protocol HealthWritebackClient {
     func requestWritePermissions() async throws -> HealthPermissionSnapshot
     func write(_ samples: [VaultSample]) async -> AppleHealthWritebackReceipt

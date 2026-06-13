@@ -115,3 +115,31 @@ public enum AppleHealthWritebackPolicy {
         }
     }
 }
+
+public enum AppleHealthWritebackReceiptMapper {
+    public static func makeVaultReceipt(
+        sourceId: String,
+        importedSamples: [VaultSample],
+        writebackReceipt: AppleHealthWritebackReceipt,
+        skippedDuplicates: Int = 0,
+        gapsDetected: Int = 0
+    ) -> VaultReceipt {
+        let unsupportedMetrics = writebackReceipt.results
+            .filter { $0.status == .unsupported }
+            .map(\.metric)
+
+        return VaultReceipt(
+            id: writebackReceipt.id,
+            sourceId: sourceId,
+            startedAt: writebackReceipt.startedAt,
+            finishedAt: writebackReceipt.finishedAt,
+            imported: importedSamples.count,
+            writtenToAppleHealth: writebackReceipt.writtenCount,
+            skippedWriteback: writebackReceipt.skippedCount,
+            skippedDuplicates: skippedDuplicates,
+            gapsDetected: gapsDetected,
+            failedToAppleHealth: writebackReceipt.failedCount,
+            unsupportedMetrics: unsupportedMetrics
+        )
+    }
+}

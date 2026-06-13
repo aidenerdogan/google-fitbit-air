@@ -3,6 +3,9 @@ import HealthPassportKit
 
 try runEncryptedVaultSmokeTests()
 try runAppleHealthWritebackPolicySmokeTests()
+try runAppleHealthWritebackReceiptMappingSmokeTests()
+try runLegacyVaultReceiptDecodeSmokeTests()
+print("HealthPassportKitSmokeTests passed")
 
 private func runEncryptedVaultSmokeTests() throws {
     let fileURL = temporaryVaultURL()
@@ -77,8 +80,6 @@ private func runEncryptedVaultSmokeTests() throws {
     } catch VaultError.invalidKeySize {
         // Expected.
     }
-
-    print("HealthPassportKitSmokeTests passed")
 }
 
 private func runAppleHealthWritebackPolicySmokeTests() throws {
@@ -115,6 +116,62 @@ private func runAppleHealthWritebackPolicySmokeTests() throws {
 
     let emptyStepsDecision = AppleHealthWritebackPolicy.decision(for: emptySteps)
     assert(emptyStepsDecision.readiness == .invalid, "Steps without a numeric value should be invalid")
+}
+
+private func runAppleHealthWritebackReceiptMappingSmokeTests() throws {
+    let source = SourceReference(provider: "fitbit")
+    let importedSamples = [
+        VaultSample(id: "steps-1", metric: .steps, startAt: Date(timeIntervalSince1970: 10), numericValue: 500, source: source),
+        VaultSample(id: "hrv-1", metric: .hrvRmssd, startAt: Date(timeIntervalSince1970: 20), numericValue: 42, source: source),
+        VaultSample(id: "distance-1", metric: .distance, startAt: Date(timeIntervalSince1970: 30), source: source),
+        VaultSample(id: "energy-1", metric: .activeEnergy, startAt: Date(timeIntervalSince1970: 40), numericValue: 12, source: source)
+    ]
+    let receipt = AppleHealthWritebackReceipt(
+        id: "writeback-1",
+        startedAt: Date(timeIntervalSince1970: 100),
+        finishedAt: Date(timeIntervalSince1970: 110),
+        results: [
+            AppleHealthWritebackResult(sampleId: "steps-1", metric: .steps, status: .written, message: "ok"),
+            AppleHealthWritebackResult(sampleId: "hrv-1", metric: .hrvRmssd, status: .unsupported, message: "passport only"),
+            AppleHealthWritebackResult(sampleId: "distance-1", metric: .distance, status: .skipped, message: "missing value"),
+            AppleHealthWritebackResult(sampleId: "energy-1", metric: .activeEnergy, status: .failed, message: "denied")
+        ]
+    )
+
+    let vaultReceipt = AppleHealthWritebackReceiptMapper.makeVaultReceipt(
+        sourceId: "dev-fitbit-fixture",
+        importedSamples: importedSamples,
+        writebackReceipt: receipt
+    )
+
+    assert(vaultReceipt.id == "writeback-1", "Vault receipt should keep writeback id")
+    assert(vaultReceipt.imported == 4, "Imported count mismatch")
+    assert(vaultReceipt.writtenToAppleHealth == 1, "Written count mismatch")
+    assert(vaultReceipt.skippedWriteback == 1, "Skipped writeback count mismatch")
+    assert(vaultReceipt.failedToAppleHealth == 1, "Failed writeback count mismatch")
+    assert(vaultReceipt.unsupportedMetrics == [.hrvRmssd], "Unsupported metric mismatch")
+}
+
+private func runLegacyVaultReceiptDecodeSmokeTests() throws {
+    let json = """
+    {
+      "id": "legacy-receipt",
+      "sourceId": "fitbit",
+      "startedAt": "2026-06-13T10:00:00Z",
+      "finishedAt": "2026-06-13T10:00:05Z",
+      "imported": 1,
+      "writtenToAppleHealth": 1,
+      "skippedDuplicates": 0,
+      "gapsDetected": 0,
+      "unsupportedMetrics": []
+    }
+    """
+
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let receipt = try decoder.decode(VaultReceipt.self, from: Data(json.utf8))
+    assert(receipt.skippedWriteback == 0, "Legacy receipt should default skipped writeback to zero")
+    assert(receipt.failedToAppleHealth == 0, "Legacy receipt should default failed writeback to zero")
 }
 
 private func temporaryVaultURL() -> URL {

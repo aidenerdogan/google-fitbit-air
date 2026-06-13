@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct PassportView: View {
+    @ObservedObject var appState: HealthPassportAppState
+
     var body: some View {
         NavigationStack {
             List {
@@ -9,7 +11,7 @@ struct PassportView: View {
                 }
 
                 Section {
-                    ContinuityPanel(score: 0, status: "Not connected")
+                    ContinuityPanel(score: continuityScore, status: continuityStatus)
                 }
 
                 Section("Metric readiness") {
@@ -21,13 +23,18 @@ struct PassportView: View {
             .navigationTitle("Health Passport")
         }
     }
+
+    private var continuityScore: Int {
+        min(100, appState.vaultSnapshot.samples.count * 12)
+    }
+
+    private var continuityStatus: String {
+        appState.vaultSnapshot.samples.isEmpty ? "Not connected" : "\(appState.vaultSnapshot.samples.count) local samples"
+    }
 }
 
 struct SourcesView: View {
-    @State private var permissionSnapshot = HealthPermissionSnapshot.notRequested
-    @State private var isRequestingAppleHealth = false
-
-    private let healthClient = HealthKitWritebackClient()
+    @ObservedObject var appState: HealthPassportAppState
 
     var body: some View {
         NavigationStack {
@@ -41,9 +48,21 @@ struct SourcesView: View {
 
                 Section("Apple Health") {
                     HealthPermissionPanel(
-                        snapshot: permissionSnapshot,
-                        isRequesting: isRequestingAppleHealth,
-                        requestAction: requestAppleHealthAccess
+                        snapshot: appState.permissionSnapshot,
+                        isRequesting: appState.isRequestingAppleHealth,
+                        requestAction: {
+                            Task { await appState.requestAppleHealthAccess() }
+                        }
+                    )
+                }
+
+                Section("Writeback Loop") {
+                    WritebackLoopPanel(
+                        statusMessage: appState.loopStatusMessage,
+                        isRunning: appState.isRunningWritebackLoop,
+                        runAction: {
+                            Task { await appState.runDevelopmentWritebackLoop() }
+                        }
                     )
                 }
 
@@ -58,57 +77,34 @@ struct SourcesView: View {
                     SourceRow(name: "WHOOP", status: "Not in MVP")
                 }
             }
+            .contentMargins(.bottom, 80, for: .scrollContent)
             .navigationTitle("Sources")
-        }
-    }
-
-    private func requestAppleHealthAccess() {
-        isRequestingAppleHealth = true
-
-        Task {
-            do {
-                permissionSnapshot = try await healthClient.requestWritePermissions()
-            } catch {
-                permissionSnapshot = HealthPermissionSnapshot(
-                    status: .denied,
-                    message: error.localizedDescription,
-                    requestedTypes: permissionSnapshot.requestedTypes
-                )
-            }
-
-            isRequestingAppleHealth = false
         }
     }
 }
 
 struct ReceiptsView: View {
+    @ObservedObject var appState: HealthPassportAppState
+
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    EmptyStatePanel(
-                        title: "Receipts will appear after first sync",
-                        detail: "Each receipt will show imported, written, skipped, unsupported, and failed records."
-                    )
+                if appState.vaultSnapshot.receipts.isEmpty {
+                    Section {
+                        EmptyStatePanel(
+                            title: "Receipts will appear after first sync",
+                            detail: "Each receipt will show imported, written, skipped, unsupported, and failed records."
+                        )
+                    }
                 }
 
                 Section("Latest") {
-                    ForEach(DemoData.receipts) { receipt in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(receipt.source)
-                                .font(.headline)
-                            Text(receipt.status)
-                                .foregroundStyle(.secondary)
-                            HStack {
-                                ReceiptCount(label: "Imported", value: receipt.imported)
-                                ReceiptCount(label: "Written", value: receipt.written)
-                                ReceiptCount(label: "Skipped", value: receipt.skipped)
-                            }
-                        }
-                        .padding(.vertical, 6)
+                    ForEach(appState.receiptSummaries) { receipt in
+                        ReceiptSummaryRow(receipt: receipt)
                     }
                 }
             }
+            .contentMargins(.bottom, 80, for: .scrollContent)
             .navigationTitle("Receipts")
         }
     }
@@ -137,12 +133,14 @@ struct CoachView: View {
 }
 
 struct SettingsView: View {
+    @ObservedObject var appState: HealthPassportAppState
+
     var body: some View {
         NavigationStack {
             List {
                 Section("Vault") {
                     Text("Encrypted local vault")
-                    Text("\(DemoData.vaultPreview.sources.count) planned local source")
+                    Text("\(appState.vaultSourceCount) local source")
                         .foregroundStyle(.secondary)
                 }
 
@@ -337,6 +335,71 @@ private struct HealthPermissionPanel: View {
         case .denied: .red
         case .unavailable: .gray
         }
+    }
+}
+
+private struct WritebackLoopPanel: View {
+    let statusMessage: String
+    let isRunning: Bool
+    let runAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Sample writeback")
+                        .font(.headline)
+                    Text(statusMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
+
+            Button(action: runAction) {
+                Text(isRunning ? "Writing..." : "Run Sample Writeback")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isRunning)
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+private struct ReceiptSummaryRow: View {
+    let receipt: SyncReceiptSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(receipt.source)
+                    .font(.headline)
+                Spacer()
+                if let finishedAt = receipt.finishedAt {
+                    Text(finishedAt, format: .dateTime.month().day().hour().minute())
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text(receipt.status)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                ReceiptCount(label: "Imported", value: receipt.imported)
+                ReceiptCount(label: "Written", value: receipt.written)
+                ReceiptCount(label: "Skipped", value: receipt.skipped)
+            }
+
+            HStack {
+                ReceiptCount(label: "Unsupported", value: receipt.unsupported)
+                ReceiptCount(label: "Failed", value: receipt.failed)
+            }
+        }
+        .padding(.vertical, 6)
     }
 }
 

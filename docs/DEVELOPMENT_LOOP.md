@@ -126,12 +126,11 @@ Confirmed:
 
 Still missing for the current value loop:
 
-- Create fake development samples.
-- Save samples into the local vault.
-- Write supported samples to Apple Health.
-- Record writeback results as receipts.
-- Show receipts in the app.
-- Add tests for granted, denied, partial, unsupported, and invalid samples.
+- Tap-test the sample writeback loop in the simulator.
+- Confirm receipt rows after a writeback run.
+- Add tests for denied and partial HealthKit permission states.
+- Add a delete/reset control for development sample data.
+- Confirm a real device behaves the same as the simulator.
 
 ## Next Three Slices
 
