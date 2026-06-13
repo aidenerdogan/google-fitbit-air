@@ -1,14 +1,18 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 
+import { containsRawHealthData, createPrivacyAuditEvent, type PrivacyAuditEvent } from "./privacy.ts";
+
 export interface ApiOptions {
   region?: string;
   now?: () => Date;
+  auditSink?: (event: PrivacyAuditEvent) => void;
 }
 
 export function createHealthPassportApi(options: ApiOptions = {}) {
   const region = options.region ?? "eu-first";
   const now = options.now ?? (() => new Date());
+  const auditSink = options.auditSink ?? (() => undefined);
 
   return createServer(async (request, response) => {
     try {
@@ -32,6 +36,15 @@ export function createHealthPassportApi(options: ApiOptions = {}) {
 
       if (request.method === "POST" && request.url === "/ai/context-packs") {
         const body = await readJson(request);
+        const receivedAt = now();
+        auditSink(
+          createPrivacyAuditEvent({
+            route: "/ai/context-packs",
+            body,
+            createdAt: receivedAt
+          })
+        );
+
         if (containsRawHealthData(body)) {
           return sendJson(response, 400, {
             error: "raw_health_data_rejected",
@@ -42,7 +55,7 @@ export function createHealthPassportApi(options: ApiOptions = {}) {
         return sendJson(response, 202, {
           accepted: true,
           mode: "preview-relay-placeholder",
-          receivedAt: now().toISOString()
+          receivedAt: receivedAt.toISOString()
         });
       }
 
@@ -53,26 +66,6 @@ export function createHealthPassportApi(options: ApiOptions = {}) {
         message: error instanceof Error ? error.message : "Unknown error"
       });
     }
-  });
-}
-
-function containsRawHealthData(value: unknown): boolean {
-  if (value === null || typeof value !== "object") {
-    return false;
-  }
-
-  if (Array.isArray(value)) {
-    return value.some(containsRawHealthData);
-  }
-
-  const record = value as Record<string, unknown>;
-  const suspiciousKeys = ["samples", "rawSamples", "healthSamples", "heartRateSamples", "sleepSamples"];
-
-  return Object.entries(record).some(([key, nested]) => {
-    if (suspiciousKeys.includes(key) && Array.isArray(nested)) {
-      return true;
-    }
-    return containsRawHealthData(nested);
   });
 }
 
