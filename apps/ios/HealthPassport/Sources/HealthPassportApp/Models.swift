@@ -30,6 +30,12 @@ struct SyncReceiptSummary: Identifiable, Hashable {
     let finishedAt: Date?
 }
 
+struct ContinuitySummary: Hashable {
+    let score: Int
+    let status: String
+    let gapsDetected: Int
+}
+
 enum DemoData {
     static let metrics: [PassportMetric] = [
         PassportMetric(
@@ -162,8 +168,39 @@ final class HealthPassportAppState: ObservableObject {
         return summaries.isEmpty ? DemoData.receipts : summaries
     }
 
+    var continuitySummary: ContinuitySummary {
+        let analysis = passportGapAnalysis
+
+        if vaultSnapshot.samples.isEmpty {
+            return ContinuitySummary(score: 0, status: "No local samples yet", gapsDetected: analysis.totalMissingDays)
+        }
+
+        let gapText = analysis.totalMissingDays == 1 ? "1 missing metric day" : "\(analysis.totalMissingDays) missing metric days"
+        return ContinuitySummary(
+            score: analysis.continuityScore,
+            status: "\(vaultSnapshot.samples.count) local samples, \(gapText)",
+            gapsDetected: analysis.totalMissingDays
+        )
+    }
+
+    var passportMetricSummaries: [PassportMetric] {
+        passportGapAnalysis.metrics.map { coverage in
+            PassportMetric(
+                id: coverage.metric.rawValue,
+                name: coverage.metric.passportDisplayName,
+                source: sourceLabel(for: coverage),
+                status: metricStatus(for: coverage.status),
+                detail: detailLabel(for: coverage)
+            )
+        }
+    }
+
     var vaultSourceCount: Int {
         vaultSnapshot.sources.count
+    }
+
+    private var passportGapAnalysis: PassportGapAnalysis {
+        PassportGapAnalyzer.analyze(snapshot: vaultSnapshot)
     }
 
     func loadVault() {
@@ -263,6 +300,7 @@ final class HealthPassportAppState: ObservableObject {
                 imported: dedupeResult.accepted.count,
                 writtenToAppleHealth: 0,
                 skippedDuplicates: dedupeResult.duplicates.count,
+                gapsDetected: PassportGapAnalyzer.analyze(snapshot: snapshot).totalMissingDays,
                 unsupportedMetrics: [.hrvRmssd]
             )
             snapshot.receipts.append(receipt)
@@ -272,6 +310,81 @@ final class HealthPassportAppState: ObservableObject {
             fitbitImportStatusMessage = "\(dedupeResult.accepted.count) Fitbit fixture samples imported, \(dedupeResult.duplicates.count) duplicates skipped."
         } catch {
             fitbitImportStatusMessage = "Fitbit fixture import failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func metricStatus(for coverageStatus: PassportMetricCoverageStatus) -> MetricStatus {
+        switch coverageStatus {
+        case .ready:
+            return .ready
+        case .gap:
+            return .gap
+        case .blocked:
+            return .blocked
+        case .passportOnly:
+            return .unsupported
+        }
+    }
+
+    private func sourceLabel(for coverage: PassportMetricCoverage) -> String {
+        if coverage.sourceProviders.isEmpty {
+            return "No source yet"
+        }
+
+        return coverage.sourceProviders.map(\.passportSourceDisplayName).joined(separator: ", ")
+    }
+
+    private func detailLabel(for coverage: PassportMetricCoverage) -> String {
+        switch coverage.status {
+        case .ready:
+            return "\(coverage.sampleCount) sample\(coverage.sampleCount == 1 ? "" : "s") preserved and ready for writeback review."
+        case .gap:
+            let dayText = coverage.missingDays.count == 1 ? "1 missing day" : "\(coverage.missingDays.count) missing days"
+            return "\(dayText) detected in the current vault window."
+        case .blocked:
+            return "No local samples yet. Connect or import a source to start coverage."
+        case .passportOnly:
+            return "Preserved in Passport, not written to Apple Health until mapping is reviewed."
+        }
+    }
+}
+
+private extension VaultMetric {
+    var passportDisplayName: String {
+        switch self {
+        case .steps:
+            return "Steps"
+        case .workout:
+            return "Workouts"
+        case .sleep:
+            return "Sleep"
+        case .heartRate:
+            return "Heart Rate"
+        case .restingHeartRate:
+            return "Resting Heart Rate"
+        case .activeEnergy:
+            return "Active Energy"
+        case .distance:
+            return "Distance"
+        case .hrvSdnn:
+            return "HRV SDNN"
+        case .hrvRmssd:
+            return "HRV RMSSD"
+        }
+    }
+}
+
+private extension String {
+    var passportSourceDisplayName: String {
+        switch self {
+        case "fitbit":
+            return "Fitbit"
+        case "fitbit_fixture":
+            return "Development Fixture"
+        case "health_passport":
+            return "Health Passport"
+        default:
+            return self
         }
     }
 }
