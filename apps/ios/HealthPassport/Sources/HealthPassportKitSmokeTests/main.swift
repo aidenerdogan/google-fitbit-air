@@ -6,6 +6,7 @@ try runAppleHealthWritebackPolicySmokeTests()
 try runAppleHealthWritebackReceiptMappingSmokeTests()
 try runLegacyVaultReceiptDecodeSmokeTests()
 try runFitbitFixtureImportReceiptSmokeTests()
+try runDuplicateImportReceiptSmokeTests()
 print("HealthPassportKitSmokeTests passed")
 
 private func runEncryptedVaultSmokeTests() throws {
@@ -189,6 +190,22 @@ private func runFitbitFixtureImportReceiptSmokeTests() throws {
     assert(receipt.imported == 7, "Fitbit fixture import should count imported samples")
     assert(receipt.writtenToAppleHealth == 0, "Fitbit fixture import should not write to Apple Health")
     assert(receipt.unsupportedMetrics == [.hrvRmssd], "Unsupported metrics should be unique and sorted")
+}
+
+private func runDuplicateImportReceiptSmokeTests() throws {
+    let receipt = VaultReceipt(
+        id: "fitbit-import-repeat",
+        sourceId: "fitbit-fixture",
+        startedAt: Date(timeIntervalSince1970: 100),
+        finishedAt: Date(timeIntervalSince1970: 101),
+        imported: 0,
+        writtenToAppleHealth: 0,
+        skippedDuplicates: 7,
+        unsupportedMetrics: [.hrvRmssd]
+    )
+
+    assert(receipt.imported == 0, "Repeat fixture import should not accept duplicates")
+    assert(receipt.skippedDuplicates == 7, "Repeat fixture import should record skipped duplicates")
 }
 
 private func temporaryVaultURL() -> URL {

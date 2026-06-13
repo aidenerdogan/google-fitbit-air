@@ -253,22 +253,23 @@ final class HealthPassportAppState: ObservableObject {
             }
 
             let samples = FitbitFixtureImport.makeSamples()
-            snapshot.samples.append(contentsOf: samples)
+            let dedupeResult = FitbitFixtureImport.dedupe(samples, against: snapshot.samples)
+            snapshot.samples.append(contentsOf: dedupeResult.accepted)
             let receipt = VaultReceipt(
                 id: UUID().uuidString,
                 sourceId: source.id,
                 startedAt: Date(),
                 finishedAt: Date(),
-                imported: samples.count,
+                imported: dedupeResult.accepted.count,
                 writtenToAppleHealth: 0,
-                skippedDuplicates: 0,
+                skippedDuplicates: dedupeResult.duplicates.count,
                 unsupportedMetrics: [.hrvRmssd]
             )
             snapshot.receipts.append(receipt)
 
             try vaultStore.save(snapshot)
             vaultSnapshot = try vaultStore.load()
-            fitbitImportStatusMessage = "Fitbit fixture imported into the local vault."
+            fitbitImportStatusMessage = "\(dedupeResult.accepted.count) Fitbit fixture samples imported, \(dedupeResult.duplicates.count) duplicates skipped."
         } catch {
             fitbitImportStatusMessage = "Fitbit fixture import failed: \(error.localizedDescription)"
         }
@@ -341,6 +342,11 @@ private enum DevelopmentHealthSamples {
 }
 
 private enum FitbitFixtureImport {
+    struct DedupeResult {
+        let accepted: [VaultSample]
+        let duplicates: [VaultSample]
+    }
+
     static let source = VaultSource(
         id: "fitbit-fixture",
         displayName: "Fitbit Fixture",
@@ -349,95 +355,123 @@ private enum FitbitFixtureImport {
     )
 
     static func makeSamples(now: Date = Date()) -> [VaultSample] {
-        let runId = UUID().uuidString
         let sourceReference = SourceReference(provider: source.provider, deviceModel: "Fitbit Fixture", appName: "Health Passport")
-        let morningStart = now.addingTimeInterval(-12_000)
-        let morningEnd = now.addingTimeInterval(-8_400)
-        let sleepStart = now.addingTimeInterval(-36_000)
-        let sleepEnd = now.addingTimeInterval(-9_000)
+        let morningStart = Date(timeIntervalSince1970: 1_781_342_000)
+        let morningEnd = Date(timeIntervalSince1970: 1_781_345_600)
+        let sleepStart = Date(timeIntervalSince1970: 1_781_311_400)
+        let sleepEnd = Date(timeIntervalSince1970: 1_781_337_600)
 
         return [
             VaultSample(
-                id: "fitbit-steps-\(runId)",
+                id: "fitbit-fixture-steps-1",
                 metric: .steps,
                 startAt: morningStart,
                 endAt: morningEnd,
                 numericValue: 1_280,
                 unit: "count",
                 source: sourceReference,
-                externalId: "fitbit-fixture-steps-\(runId)",
+                externalId: "fitbit-fixture-steps-1",
                 confidence: .high,
                 importedAt: now
             ),
             VaultSample(
-                id: "fitbit-sleep-\(runId)",
+                id: "fitbit-fixture-sleep-1",
                 metric: .sleep,
                 startAt: sleepStart,
                 endAt: sleepEnd,
                 textValue: "asleep",
                 source: sourceReference,
-                externalId: "fitbit-fixture-sleep-\(runId)",
+                externalId: "fitbit-fixture-sleep-1",
                 confidence: .medium,
                 importedAt: now
             ),
             VaultSample(
-                id: "fitbit-heart-rate-\(runId)",
+                id: "fitbit-fixture-hr-1",
                 metric: .heartRate,
                 startAt: morningEnd,
                 numericValue: 72,
                 unit: "count/min",
                 source: sourceReference,
-                externalId: "fitbit-fixture-hr-\(runId)",
+                externalId: "fitbit-fixture-hr-1",
                 confidence: .high,
                 importedAt: now
             ),
             VaultSample(
-                id: "fitbit-resting-heart-rate-\(runId)",
+                id: "fitbit-fixture-rhr-1",
                 metric: .restingHeartRate,
                 startAt: sleepEnd,
                 numericValue: 58,
                 unit: "count/min",
                 source: sourceReference,
-                externalId: "fitbit-fixture-rhr-\(runId)",
+                externalId: "fitbit-fixture-rhr-1",
                 confidence: .medium,
                 importedAt: now
             ),
             VaultSample(
-                id: "fitbit-active-energy-\(runId)",
+                id: "fitbit-fixture-energy-1",
                 metric: .activeEnergy,
                 startAt: morningStart,
                 endAt: morningEnd,
                 numericValue: 86,
                 unit: "kcal",
                 source: sourceReference,
-                externalId: "fitbit-fixture-energy-\(runId)",
+                externalId: "fitbit-fixture-energy-1",
                 confidence: .high,
                 importedAt: now
             ),
             VaultSample(
-                id: "fitbit-distance-\(runId)",
+                id: "fitbit-fixture-distance-1",
                 metric: .distance,
                 startAt: morningStart,
                 endAt: morningEnd,
                 numericValue: 920,
                 unit: "m",
                 source: sourceReference,
-                externalId: "fitbit-fixture-distance-\(runId)",
+                externalId: "fitbit-fixture-distance-1",
                 confidence: .high,
                 importedAt: now
             ),
             VaultSample(
-                id: "fitbit-hrv-rmssd-\(runId)",
+                id: "fitbit-fixture-hrv-rmssd-1",
                 metric: .hrvRmssd,
                 startAt: sleepEnd,
                 numericValue: 44,
                 unit: "ms",
                 source: sourceReference,
-                externalId: "fitbit-fixture-hrv-rmssd-\(runId)",
+                externalId: "fitbit-fixture-hrv-rmssd-1",
                 confidence: .low,
                 importedAt: now
             )
         ]
+    }
+
+    static func dedupe(_ incoming: [VaultSample], against existing: [VaultSample]) -> DedupeResult {
+        var seen = Set(existing.map { dedupeKey(for: $0) })
+        var accepted: [VaultSample] = []
+        var duplicates: [VaultSample] = []
+
+        for sample in incoming {
+            let key = dedupeKey(for: sample)
+            if seen.contains(key) {
+                duplicates.append(sample)
+            } else {
+                seen.insert(key)
+                accepted.append(sample)
+            }
+        }
+
+        return DedupeResult(accepted: accepted, duplicates: duplicates)
+    }
+
+    private static func dedupeKey(for sample: VaultSample) -> String {
+        if let externalId = sample.externalId {
+            return "\(sample.source.provider):\(sample.metric.rawValue):\(externalId)"
+        }
+
+        let end = sample.endAt?.timeIntervalSince1970.description ?? ""
+        let numeric = sample.numericValue?.description ?? ""
+        let text = sample.textValue ?? ""
+        return "\(sample.source.provider):\(sample.metric.rawValue):\(sample.startAt.timeIntervalSince1970):\(end):\(numeric):\(text)"
     }
 }
 
