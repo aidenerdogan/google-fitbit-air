@@ -66,6 +66,16 @@ struct SourcesView: View {
                     )
                 }
 
+                Section("Fitbit Fixture") {
+                    FixtureImportPanel(
+                        statusMessage: appState.fitbitImportStatusMessage,
+                        isImporting: appState.isImportingFitbitFixture,
+                        importAction: {
+                            Task { await appState.importFitbitFixture() }
+                        }
+                    )
+                }
+
                 Section("Planned sources") {
                     SourceRow(name: "Fitbit/Google", status: "First connector")
                     SourceRow(name: "Apple Health", status: "Writeback target")
@@ -363,6 +373,32 @@ private struct WritebackLoopPanel: View {
             }
             .buttonStyle(.bordered)
             .disabled(isRunning)
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+private struct FixtureImportPanel: View {
+    let statusMessage: String
+    let isImporting: Bool
+    let importAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Source import")
+                    .font(.headline)
+                Text(statusMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button(action: importAction) {
+                Text(isImporting ? "Importing..." : "Import Fitbit Fixture")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isImporting)
         }
         .padding(.vertical, 8)
     }

@@ -6,6 +6,8 @@ import {
   createDefaultCapabilityMatrix,
   createSyncReceipt,
   dedupeSamples,
+  FitbitFixtureConnector,
+  mapFitbitFixtureError,
   normalizeSample
 } from "../src/index.ts";
 
@@ -84,4 +86,44 @@ test("creates compact sync receipts with sorted unsupported metrics", () => {
   assert.deepEqual(receipt.unsupported, ["hrv_rmssd", "sleep"]);
   assert.equal(receipt.skippedDuplicates, 1);
   assert.equal(receipt.gapsDetected, 2);
+});
+
+test("imports Fitbit fixture samples through the connector boundary", async () => {
+  const connector = new FitbitFixtureConnector({ importedAt: "2026-06-13T12:00:00Z" });
+  const auth = await connector.authorize();
+  const capabilities = await connector.getCapabilities();
+  const batch = await connector.sync({ sourceId: "fitbit", metrics: ["steps", "sleep", "hrv_rmssd"] });
+
+  assert.equal(auth.status, "authorized");
+  assert.equal(capabilities.readable.steps, true);
+  assert.equal(capabilities.appleHealthWriteback.hrv_rmssd, "unsupported");
+  assert.equal(batch.sourceId, "fitbit");
+  assert.equal(batch.samples.length, 3);
+  assert.deepEqual(
+    batch.samples.map((sample) => sample.metric).sort(),
+    ["hrv_rmssd", "sleep", "steps"]
+  );
+  assert.equal(batch.samples[0].source.provider, "fitbit");
+  assert.equal(batch.issues.length, 0);
+});
+
+test("maps Fitbit fixture connector error scenarios", async () => {
+  const expired = new FitbitFixtureConnector({ scenario: "expired_token" });
+  const expiredAuth = await expired.authorize();
+  const expiredBatch = await expired.sync({ sourceId: "fitbit" });
+
+  assert.equal(expiredAuth.status, "expired");
+  assert.equal(expiredBatch.samples.length, 0);
+  assert.equal(expiredBatch.issues[0]?.code, "fitbit_token_expired");
+
+  const rateLimit = mapFitbitFixtureError("rate_limit");
+  const providerOutage = mapFitbitFixtureError("provider_outage");
+  const missingMetric = new FitbitFixtureConnector({ scenario: "missing_metric" });
+  const missingMetricBatch = await missingMetric.sync({ sourceId: "fitbit" });
+
+  assert.equal(rateLimit.code, "fitbit_rate_limited");
+  assert.equal(providerOutage.code, "fitbit_provider_outage");
+  assert.equal(missingMetricBatch.samples.length > 0, true);
+  assert.equal(missingMetricBatch.issues[0]?.code, "fitbit_missing_metric");
+  assert.equal(missingMetricBatch.issues[0]?.metric, "sleep");
 });
