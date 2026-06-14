@@ -11,19 +11,26 @@ struct PassportView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    OnboardingPanel()
-                        .healthPanelRow()
+                if appState.vaultSnapshot.samples.isEmpty {
+                    Section {
+                        OnboardingPanel()
+                            .healthPanelRow()
+                    }
                 }
 
                 Section {
-                    ContinuityPanel(summary: appState.continuitySummary)
-                        .healthPanelRow()
+                    PassportOverviewPanel(
+                        summary: appState.continuitySummary,
+                        sampleCount: appState.vaultSnapshot.samples.count,
+                        sourceCount: appState.vaultSourceCount,
+                        receiptCount: appState.vaultSnapshot.receipts.count
+                    )
+                    .healthPanelRow()
                 }
 
-                Section("Metric readiness") {
-                    ForEach(appState.passportMetricSummaries) { metric in
-                        MetricRow(metric: metric)
+                if !appState.passportMetricSummaries.isEmpty {
+                    Section("Readiness") {
+                        MetricReadinessPanel(metrics: appState.passportMetricSummaries)
                             .healthPanelRow()
                     }
                 }
@@ -252,7 +259,7 @@ struct SourcesView: View {
                     .healthPanelRow()
                 }
 
-                Section("Writeback Loop") {
+                Section("Developer tools") {
                     WritebackLoopPanel(
                         statusMessage: appState.loopStatusMessage,
                         isRunning: appState.isRunningWritebackLoop,
@@ -261,9 +268,7 @@ struct SourcesView: View {
                         }
                     )
                     .healthPanelRow()
-                }
 
-                Section("Fitbit Fixture") {
                     FixtureImportPanel(
                         statusMessage: appState.fitbitImportStatusMessage,
                         isImporting: appState.isImportingFitbitFixture,
@@ -333,10 +338,20 @@ struct CoachView: View {
     var body: some View {
         NavigationStack {
             List {
+                if appState.vaultSnapshot.samples.isEmpty {
+                    Section {
+                        EmptyStatePanel(
+                            title: "Coach is off by default",
+                            detail: "Later, you will preview the exact trend summary before anything is sent to an AI provider."
+                        )
+                        .healthPanelRow()
+                    }
+                }
+
                 Section {
                     EmptyStatePanel(
-                        title: "Coach is off by default",
-                        detail: "Later, you will preview the exact trend summary before anything is sent to an AI provider."
+                        title: "Local-only preview",
+                        detail: "This screen summarizes vault coverage and gaps without sending raw samples anywhere."
                     )
                     .healthPanelRow()
                 }
@@ -449,32 +464,117 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section("Vault") {
-                    Text("Encrypted local vault")
-                        .healthPanelRow()
-                    Text("\(appState.vaultSourceCount) local source")
-                        .foregroundStyle(.secondary)
-                        .healthPanelRow()
+                    SettingsStatusPanel(
+                        title: "Encrypted local vault",
+                        detail: "Stored on this device. Raw samples stay local unless a future export or backup is approved.",
+                        facts: [
+                            ("Sources", "\(appState.vaultSourceCount)"),
+                            ("Samples", "\(appState.vaultSnapshot.samples.count)"),
+                            ("Receipts", "\(appState.vaultSnapshot.receipts.count)")
+                        ]
+                    )
+                    .healthPanelRow()
                 }
 
                 Section("Privacy") {
-                    Text("Local-first vault")
+                    SettingsChecklistRow(title: "Local-first vault", status: "Active", color: .green)
                         .healthPanelRow()
-                    Text("AI requires explicit consent")
+                    SettingsChecklistRow(title: "AI requires explicit consent", status: "Active", color: .green)
                         .healthPanelRow()
-                    Text("Export and delete controls planned")
+                    SettingsChecklistRow(title: "Export and delete controls", status: "Planned", color: .orange)
                         .healthPanelRow()
                 }
 
                 Section("Manual setup") {
-                    Text("Apple Developer HealthKit capability")
+                    SettingsChecklistRow(title: "Apple Developer HealthKit capability", status: "Done", color: .green)
                         .healthPanelRow()
-                    Text("Fitbit/Google developer app")
+                    SettingsChecklistRow(title: "Fitbit/Google developer app", status: "Done", color: .green)
+                        .healthPanelRow()
+                    SettingsChecklistRow(title: "Google Sign-In in app", status: "Next", color: .teal)
                         .healthPanelRow()
                 }
             }
             .navigationTitle("Settings")
             .healthNavigationTitleMode()
             .healthListChrome()
+        }
+    }
+}
+
+private struct PassportOverviewPanel: View {
+    let summary: ContinuitySummary
+    let sampleCount: Int
+    let sourceCount: Int
+    let receiptCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Vault overview")
+                        .font(.headline)
+                    Text(summary.status)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("\(summary.score)")
+                        .font(.system(size: 30, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                    Text("Continuity")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack(spacing: 8) {
+                SummaryPill(label: "Samples", value: sampleCount)
+                SummaryPill(label: "Sources", value: sourceCount)
+                SummaryPill(label: "Receipts", value: receiptCount)
+            }
+        }
+    }
+}
+
+private struct SummaryPill: View {
+    let label: String
+    let value: Int
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text("\(value)")
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 7)
+        .background(Color.teal.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct MetricReadinessPanel: View {
+    let metrics: [PassportMetric]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(metrics.prefix(4)) { metric in
+                MetricRow(metric: metric)
+                if metric.id != metrics.prefix(4).last?.id {
+                    Divider()
+                }
+            }
+
+            if metrics.count > 4 {
+                Text("\(metrics.count - 4) more metrics tracked in the local vault.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -545,7 +645,7 @@ private struct MetricRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(metric.name)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
                 Text(metric.status.rawValue)
                     .font(.caption)
@@ -700,28 +800,33 @@ private struct HealthPermissionPanel: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            LazyVGrid(columns: permissionColumns, alignment: .leading, spacing: 8) {
                 ForEach(snapshot.requestedTypes) { type in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(type.name)
-                                .font(.subheadline.weight(.semibold))
-                            Text(type.direction.rawValue)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        Text(type.access.rawValue)
-                            .font(.caption)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(type.name)
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                        Text("\(type.direction.rawValue) • \(type.access.rawValue)")
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.75)
+                            .minimumScaleFactor(0.72)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
                 }
             }
         }
+    }
+
+    private var permissionColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: 8),
+            GridItem(.flexible(), spacing: 8)
+        ]
     }
 
     private var permissionColor: Color {
@@ -831,6 +936,58 @@ private struct ReceiptSummaryRow: View {
             GridItem(.flexible(), spacing: 10),
             GridItem(.flexible(), spacing: 10)
         ]
+    }
+}
+
+private struct SettingsStatusPanel: View {
+    let title: String
+    let detail: String
+    let facts: [(String, String)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+            Text(detail)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                ForEach(facts, id: \.0) { fact in
+                    VStack(spacing: 1) {
+                        Text(fact.1)
+                            .font(.subheadline.weight(.semibold))
+                            .monospacedDigit()
+                        Text(fact.0)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+}
+
+private struct SettingsChecklistRow: View {
+    let title: String
+    let status: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            Text(status)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(color)
+        }
     }
 }
 
