@@ -224,12 +224,21 @@ struct SourcesView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    EmptyStatePanel(
-                        title: "No source connected yet",
-                        detail: "Start with Fitbit/Google, then choose which data types should be preserved before Apple Health writeback."
-                    )
-                    .healthPanelRow()
+                if appState.connectedSourceSummaries.isEmpty {
+                    Section {
+                        EmptyStatePanel(
+                            title: "No source connected yet",
+                            detail: "Start with Fitbit/Google, then choose which data types should be preserved before Apple Health writeback."
+                        )
+                        .healthPanelRow()
+                    }
+                } else {
+                    Section("Connected sources") {
+                        ForEach(appState.connectedSourceSummaries) { source in
+                            ConnectedSourceRow(source: source)
+                                .healthPanelRow()
+                        }
+                    }
                 }
 
                 Section("Apple Health") {
@@ -577,6 +586,65 @@ private struct SourceRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+        }
+    }
+}
+
+private struct ConnectedSourceRow: View {
+    let source: ConnectedSourceSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(source.name)
+                        .font(.headline)
+                    Text(source.provider)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(source.sampleCount)")
+                        .font(.headline.monospacedDigit())
+                    Text(source.sampleCount == 1 ? "Sample" : "Samples")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack(spacing: 10) {
+                SourceMetaLabel(title: "Connected", date: source.connectedAt)
+                if let lastSyncAt = source.lastSyncAt {
+                    SourceMetaLabel(title: "Last sync", date: lastSyncAt)
+                } else {
+                    Text("No sync receipt yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text("\(source.receiptCount) receipt\(source.receiptCount == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct SourceMetaLabel: View {
+    let title: String
+    let date: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(date, format: .dateTime.month().day().hour().minute())
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

@@ -60,6 +60,16 @@ struct PassportTimelineItem: Identifiable, Hashable {
     let statusKind: MetricStatus
 }
 
+struct ConnectedSourceSummary: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let provider: String
+    let connectedAt: Date
+    let lastSyncAt: Date?
+    let sampleCount: Int
+    let receiptCount: Int
+}
+
 struct CoachContextPreview: Hashable {
     let title: String
     let summaryLines: [String]
@@ -386,6 +396,26 @@ final class HealthPassportAppState: ObservableObject {
 
     var vaultSourceCount: Int {
         vaultSnapshot.sources.count
+    }
+
+    var connectedSourceSummaries: [ConnectedSourceSummary] {
+        vaultSnapshot.sources
+            .sorted { $0.connectedAt > $1.connectedAt }
+            .map { source in
+                let samples = vaultSnapshot.samples.filter { $0.source.provider == source.provider || $0.source.provider == source.id }
+                let receipts = vaultSnapshot.receipts.filter { $0.sourceId == source.id }
+                let latestReceiptDate = receipts.map(\.finishedAt).max()
+
+                return ConnectedSourceSummary(
+                    id: source.id,
+                    name: source.displayName,
+                    provider: source.provider.passportSourceDisplayName,
+                    connectedAt: source.connectedAt,
+                    lastSyncAt: source.lastSyncAt ?? latestReceiptDate,
+                    sampleCount: samples.count,
+                    receiptCount: receipts.count
+                )
+            }
     }
 
     private var passportGapAnalysis: PassportGapAnalysis {
