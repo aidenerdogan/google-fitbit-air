@@ -26,6 +26,7 @@ struct RootView: View {
                 .tabItem { Text("Settings") }
                 .tag(PassportSection.settings)
         }
+        .tint(.teal)
     }
 }
 
