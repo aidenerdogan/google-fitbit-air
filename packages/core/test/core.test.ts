@@ -196,6 +196,7 @@ test("plans Google Health read scopes for MVP import metrics", () => {
     GOOGLE_HEALTH_SCOPES.activityAndFitnessRead,
     GOOGLE_HEALTH_SCOPES.healthMetricsRead,
     GOOGLE_HEALTH_SCOPES.profileRead,
+    GOOGLE_HEALTH_SCOPES.settingsRead,
     GOOGLE_HEALTH_SCOPES.sleepRead
   ]);
   assert.equal(scopes.some((scope) => scope.includes(".write")), false);

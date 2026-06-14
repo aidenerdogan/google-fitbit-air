@@ -76,13 +76,15 @@ public struct VaultSource: Codable, Identifiable, Hashable, Sendable {
     public let provider: String
     public let connectedAt: Date
     public let lastSyncAt: Date?
+    public let detail: String?
 
-    public init(id: String, displayName: String, provider: String, connectedAt: Date, lastSyncAt: Date? = nil) {
+    public init(id: String, displayName: String, provider: String, connectedAt: Date, lastSyncAt: Date? = nil, detail: String? = nil) {
         self.id = id
         self.displayName = displayName
         self.provider = provider
         self.connectedAt = connectedAt
         self.lastSyncAt = lastSyncAt
+        self.detail = detail
     }
 }
 

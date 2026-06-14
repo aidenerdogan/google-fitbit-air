@@ -5,6 +5,7 @@ try runEncryptedVaultSmokeTests()
 try runAppleHealthWritebackPolicySmokeTests()
 try runAppleHealthWritebackReceiptMappingSmokeTests()
 try runLegacyVaultReceiptDecodeSmokeTests()
+try runLegacyVaultSourceDecodeSmokeTests()
 try runFitbitFixtureImportReceiptSmokeTests()
 try runDuplicateImportReceiptSmokeTests()
 try runPassportGapAnalysisSmokeTests()
@@ -176,6 +177,23 @@ private func runLegacyVaultReceiptDecodeSmokeTests() throws {
     let receipt = try decoder.decode(VaultReceipt.self, from: Data(json.utf8))
     assert(receipt.skippedWriteback == 0, "Legacy receipt should default skipped writeback to zero")
     assert(receipt.failedToAppleHealth == 0, "Legacy receipt should default failed writeback to zero")
+}
+
+private func runLegacyVaultSourceDecodeSmokeTests() throws {
+    let json = """
+    {
+      "id": "google-health",
+      "displayName": "Google Health",
+      "provider": "google_health",
+      "connectedAt": "2026-06-14T10:00:00Z",
+      "lastSyncAt": "2026-06-14T10:00:05Z"
+    }
+    """
+
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let source = try decoder.decode(VaultSource.self, from: Data(json.utf8))
+    assert(source.detail == nil, "Legacy source should decode without metadata detail")
 }
 
 private func runFitbitFixtureImportReceiptSmokeTests() throws {

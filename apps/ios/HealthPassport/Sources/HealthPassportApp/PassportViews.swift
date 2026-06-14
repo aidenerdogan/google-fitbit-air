@@ -252,8 +252,13 @@ struct SourcesView: View {
                     GoogleHealthConnectionPanel(
                         status: appState.googleConnectionStatus,
                         isConnecting: appState.isConnectingGoogleHealth,
+                        isRefreshingMetadata: appState.isRefreshingGoogleMetadata,
+                        metadataStatusMessage: appState.googleMetadataStatusMessage,
                         connectAction: {
                             Task { await appState.connectGoogleHealth() }
+                        },
+                        refreshMetadataAction: {
+                            Task { await appState.refreshGoogleHealthMetadata() }
                         }
                     )
                     .healthPanelRow()
@@ -740,6 +745,12 @@ private struct ConnectedSourceRow: View {
             Text("\(source.receiptCount) receipt\(source.receiptCount == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            if let detail = source.detail {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -747,7 +758,10 @@ private struct ConnectedSourceRow: View {
 private struct GoogleHealthConnectionPanel: View {
     let status: ProviderOAuthConnectionStatus
     let isConnecting: Bool
+    let isRefreshingMetadata: Bool
+    let metadataStatusMessage: String
     let connectAction: () -> Void
+    let refreshMetadataAction: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -775,6 +789,16 @@ private struct GoogleHealthConnectionPanel: View {
                 .buttonBorderShape(.roundedRectangle(radius: 8))
                 .controlSize(.regular)
                 .disabled(isConnecting || status == .notConfigured)
+
+            Button(metadataButtonTitle, action: refreshMetadataAction)
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.roundedRectangle(radius: 8))
+                .controlSize(.regular)
+                .disabled(isRefreshingMetadata || !isConnected)
+
+            Text(metadataStatusMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             Text("Read-only Google scopes are requested. Tokens are saved in Keychain, not in app files.")
                 .font(.caption)
@@ -806,6 +830,18 @@ private struct GoogleHealthConnectionPanel: View {
         default:
             return "Connect Google Health"
         }
+    }
+
+    private var metadataButtonTitle: String {
+        isRefreshingMetadata ? "Refreshing Metadata..." : "Refresh Source Metadata"
+    }
+
+    private var isConnected: Bool {
+        if case .connected = status {
+            return true
+        }
+
+        return false
     }
 
     private var statusColor: Color {

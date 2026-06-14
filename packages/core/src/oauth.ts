@@ -32,6 +32,7 @@ export const GOOGLE_HEALTH_SCOPES = {
   activityAndFitnessRead: "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
   healthMetricsRead: "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
   profileRead: "https://www.googleapis.com/auth/googlehealth.profile.readonly",
+  settingsRead: "https://www.googleapis.com/auth/googlehealth.settings.readonly",
   sleepRead: "https://www.googleapis.com/auth/googlehealth.sleep.readonly"
 } as const;
 
@@ -53,7 +54,7 @@ export const MVP_IMPORT_METRICS: HealthMetric[] = [
   "hrv_rmssd"
 ];
 
-export function googleHealthScopesForMetrics(metrics: HealthMetric[], includeProfile = true): string[] {
+export function googleHealthScopesForMetrics(metrics: HealthMetric[], includeProfile = true, includeSourceMetadata = true): string[] {
   const scopes = new Set<string>();
 
   for (const metric of metrics) {
@@ -64,6 +65,10 @@ export function googleHealthScopesForMetrics(metrics: HealthMetric[], includePro
 
   if (includeProfile) {
     scopes.add(GOOGLE_HEALTH_SCOPES.profileRead);
+  }
+
+  if (includeSourceMetadata) {
+    scopes.add(GOOGLE_HEALTH_SCOPES.settingsRead);
   }
 
   return Array.from(scopes).sort();

@@ -25,6 +25,7 @@ struct GoogleHealthOAuthConfiguration: Hashable {
                 "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
                 "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
                 "https://www.googleapis.com/auth/googlehealth.profile.readonly",
+                "https://www.googleapis.com/auth/googlehealth.settings.readonly",
                 "https://www.googleapis.com/auth/googlehealth.sleep.readonly"
             ]
         )
@@ -277,6 +278,100 @@ enum GoogleHealthOAuthError: LocalizedError {
             return "Google callback did not include an authorization code."
         case .tokenExchangeFailed(let message):
             return "Token exchange failed: \(message)"
+        }
+    }
+}
+
+struct GoogleHealthMetadataSummary: Hashable {
+    let profileReachable: Bool
+    let pairedDeviceCount: Int?
+
+    var sourceDetail: String {
+        if let pairedDeviceCount {
+            let deviceText = pairedDeviceCount == 1 ? "1 paired device" : "\(pairedDeviceCount) paired devices"
+            return "Profile checked. \(deviceText) found."
+        }
+
+        return "Profile checked. Reconnect to add paired device metadata."
+    }
+}
+
+struct GoogleHealthAPIClient {
+    private static let profileScope = "https://www.googleapis.com/auth/googlehealth.profile.readonly"
+    private static let settingsScope = "https://www.googleapis.com/auth/googlehealth.settings.readonly"
+
+    func fetchMetadata(tokens: ProviderOAuthTokenSet) async throws -> GoogleHealthMetadataSummary {
+        guard tokens.scopes.contains(Self.profileScope) else {
+            throw GoogleHealthAPIError.missingScope("profile")
+        }
+
+        guard tokens.expiresAt > Date() else {
+            throw GoogleHealthAPIError.expiredToken
+        }
+
+        _ = try await fetchJSON(path: "/v4/users/me/profile", tokens: tokens)
+
+        guard tokens.scopes.contains(Self.settingsScope) else {
+            return GoogleHealthMetadataSummary(profileReachable: true, pairedDeviceCount: nil)
+        }
+
+        let pairedDevices = try await fetchPairedDevices(tokens: tokens)
+        return GoogleHealthMetadataSummary(profileReachable: true, pairedDeviceCount: pairedDevices.count)
+    }
+
+    private func fetchPairedDevices(tokens: ProviderOAuthTokenSet) async throws -> [GoogleHealthPairedDevice] {
+        let data = try await fetchJSON(path: "/v4/users/me/pairedDevices?pageSize=100", tokens: tokens)
+        let response = try JSONDecoder().decode(GoogleHealthPairedDevicesResponse.self, from: data)
+        return response.pairedDevices ?? []
+    }
+
+    private func fetchJSON(path: String, tokens: ProviderOAuthTokenSet) async throws -> Data {
+        guard let url = URL(string: "https://health.googleapis.com\(path)") else {
+            throw GoogleHealthAPIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("\(tokens.tokenType) \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GoogleHealthAPIError.invalidResponse
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw GoogleHealthAPIError.requestFailed(httpResponse.statusCode)
+        }
+
+        return data
+    }
+}
+
+private struct GoogleHealthPairedDevicesResponse: Decodable {
+    let pairedDevices: [GoogleHealthPairedDevice]?
+}
+
+private struct GoogleHealthPairedDevice: Decodable, Hashable {}
+
+enum GoogleHealthAPIError: LocalizedError {
+    case expiredToken
+    case invalidURL
+    case invalidResponse
+    case missingScope(String)
+    case requestFailed(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .expiredToken:
+            return "Google token is expired. Reconnect Google Health before refreshing metadata."
+        case .invalidURL:
+            return "Google Health metadata URL could not be created."
+        case .invalidResponse:
+            return "Google Health metadata response was not HTTP."
+        case .missingScope(let scope):
+            return "Google token is missing \(scope) metadata scope. Reconnect Google Health."
+        case .requestFailed(let status):
+            return "Google Health metadata request failed with HTTP \(status)."
         }
     }
 }

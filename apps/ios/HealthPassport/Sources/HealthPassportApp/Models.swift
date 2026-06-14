@@ -66,6 +66,7 @@ struct ConnectedSourceSummary: Identifiable, Hashable {
     let provider: String
     let connectedAt: Date
     let lastSyncAt: Date?
+    let detail: String?
     let sampleCount: Int
     let receiptCount: Int
 }
@@ -232,8 +233,10 @@ final class HealthPassportAppState: ObservableObject {
     @Published var isRunningWritebackLoop = false
     @Published var isImportingFitbitFixture = false
     @Published var isConnectingGoogleHealth = false
+    @Published var isRefreshingGoogleMetadata = false
     @Published var loopStatusMessage = "No writeback loop has run yet."
     @Published var fitbitImportStatusMessage = "No Fitbit fixture has been imported yet."
+    @Published var googleMetadataStatusMessage = "Metadata has not been refreshed yet."
     @Published var googleConnectionStatus: ProviderOAuthConnectionStatus
     @Published var passportMetricFilter: VaultMetric?
     @Published var passportSourceFilter: String?
@@ -243,6 +246,7 @@ final class HealthPassportAppState: ObservableObject {
     private let healthClient: HealthWritebackClient
     private let providerTokenStore: ProviderTokenStoring
     private let googleHealthOAuthClient: GoogleHealthOAuthClient
+    private let googleHealthAPIClient: GoogleHealthAPIClient
     private let startupError: String?
 
     init(
@@ -250,6 +254,7 @@ final class HealthPassportAppState: ObservableObject {
         healthClient: HealthWritebackClient,
         providerTokenStore: ProviderTokenStoring = KeychainProviderTokenStore(),
         googleHealthOAuthClient: GoogleHealthOAuthClient? = nil,
+        googleHealthAPIClient: GoogleHealthAPIClient = GoogleHealthAPIClient(),
         startupError: String? = nil
     ) {
         self.vaultStore = vaultStore
@@ -257,6 +262,7 @@ final class HealthPassportAppState: ObservableObject {
         self.providerTokenStore = providerTokenStore
         let oauthClient = googleHealthOAuthClient ?? GoogleHealthOAuthClient(tokenStore: providerTokenStore)
         self.googleHealthOAuthClient = oauthClient
+        self.googleHealthAPIClient = googleHealthAPIClient
         self.googleConnectionStatus = oauthClient.isConfigured ? .ready : .notConfigured
         self.startupError = startupError
         loadVault()
@@ -426,6 +432,7 @@ final class HealthPassportAppState: ObservableObject {
                     provider: source.provider.passportSourceDisplayName,
                     connectedAt: source.connectedAt,
                     lastSyncAt: source.lastSyncAt ?? latestReceiptDate,
+                    detail: source.detail,
                     sampleCount: samples.count,
                     receiptCount: receipts.count
                 )
@@ -468,8 +475,52 @@ final class HealthPassportAppState: ObservableObject {
             let tokens = try await googleHealthOAuthClient.connect()
             try saveGoogleHealthConnection(tokens: tokens)
             googleConnectionStatus = .connected(tokens.expiresAt, tokens.scopes)
+            googleMetadataStatusMessage = "Google Health token saved. Refresh metadata when ready."
         } catch {
             googleConnectionStatus = .failed(error.localizedDescription)
+        }
+    }
+
+    func refreshGoogleHealthMetadata() async {
+        guard let vaultStore else {
+            googleMetadataStatusMessage = startupError ?? "Local vault is unavailable."
+            return
+        }
+
+        isRefreshingGoogleMetadata = true
+        googleMetadataStatusMessage = "Checking Google Health metadata."
+        defer { isRefreshingGoogleMetadata = false }
+
+        do {
+            guard let tokens = try providerTokenStore.load(providerId: .googleHealth) else {
+                googleMetadataStatusMessage = "Connect Google Health before refreshing metadata."
+                return
+            }
+
+            let metadata = try await googleHealthAPIClient.fetchMetadata(tokens: tokens)
+            var snapshot = try vaultStore.load()
+            let now = Date()
+            let existing = snapshot.sources.first { $0.id == GoogleHealthSource.id }
+            let source = VaultSource(
+                id: GoogleHealthSource.id,
+                displayName: GoogleHealthSource.displayName,
+                provider: GoogleHealthSource.provider,
+                connectedAt: existing?.connectedAt ?? now,
+                lastSyncAt: now,
+                detail: metadata.sourceDetail
+            )
+
+            if let index = snapshot.sources.firstIndex(where: { $0.id == GoogleHealthSource.id }) {
+                snapshot.sources[index] = source
+            } else {
+                snapshot.sources.append(source)
+            }
+
+            try vaultStore.save(snapshot)
+            replaceVaultSnapshot(try vaultStore.load())
+            googleMetadataStatusMessage = metadata.sourceDetail
+        } catch {
+            googleMetadataStatusMessage = "Metadata refresh failed: \(error.localizedDescription)"
         }
     }
 
@@ -486,7 +537,7 @@ final class HealthPassportAppState: ObservableObject {
                 googleConnectionStatus = .ready
             }
         } catch {
-            googleConnectionStatus = .failed("Google token status could not be read from Keychain.")
+            googleConnectionStatus = .failed("Reconnect Google Health to refresh the saved token status.")
         }
     }
 
@@ -515,7 +566,8 @@ final class HealthPassportAppState: ObservableObject {
             displayName: GoogleHealthSource.displayName,
             provider: GoogleHealthSource.provider,
             connectedAt: snapshot.sources.first { $0.id == GoogleHealthSource.id }?.connectedAt ?? now,
-            lastSyncAt: now
+            lastSyncAt: now,
+            detail: snapshot.sources.first { $0.id == GoogleHealthSource.id }?.detail ?? "OAuth token saved. Metadata not refreshed yet."
         )
 
         if let index = snapshot.sources.firstIndex(where: { $0.id == GoogleHealthSource.id }) {
