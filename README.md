@@ -15,6 +15,11 @@ to Apple Health with user permission.
 
 See `docs/ARCHITECTURE.md` for the full boundary map.
 
+## Git Workflow
+
+Use feature branches and fast-forward merges for solo development. See
+`docs/GIT_WORKFLOW.md` for the exact local Git settings and helper commands.
+
 ## Verification
 
 This workspace currently has Node available but not `npm`, and Swift through
