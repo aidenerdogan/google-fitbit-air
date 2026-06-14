@@ -283,9 +283,12 @@ struct CoachView: View {
                 }
 
                 Section("Consent") {
-                    Text("No context is sent from this screen.")
-                    Text("Future AI requests will require an approval step after this preview.")
-                        .foregroundStyle(.secondary)
+                    CoachConsentPanel(
+                        status: appState.coachConsentStatus,
+                        canApprove: appState.canApproveCoachContext,
+                        approve: appState.approveCoachContextPreview,
+                        cancel: appState.cancelCoachContextPreview
+                    )
                 }
             }
             .navigationTitle("Coach")
@@ -328,6 +331,46 @@ private struct CoachLineGroup: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+}
+
+private struct CoachConsentPanel: View {
+    let status: CoachConsentStatus
+    let canApprove: Bool
+    let approve: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(status.title)
+                .font(.headline)
+            Text(status.detail)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            ViewThatFits {
+                HStack(spacing: 10) {
+                    consentButtons
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    consentButtons
+                }
+            }
+            .buttonStyle(.bordered)
+
+            Text(canApprove ? "Approval only unlocks a future send step." : "Import local source data before approving a coach context.")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var consentButtons: some View {
+        Group {
+            Button("Approve Preview", action: approve)
+                .disabled(!canApprove)
+            Button("Cancel", role: .cancel, action: cancel)
         }
     }
 }

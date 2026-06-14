@@ -66,6 +66,38 @@ struct CoachContextPreview: Hashable {
     let gapLines: [String]
     let receiptLines: [String]
     let footer: String
+
+    var isEmpty: Bool {
+        summaryLines.isEmpty && gapLines.isEmpty && receiptLines.isEmpty
+    }
+}
+
+enum CoachConsentStatus: Hashable {
+    case notReviewed
+    case approved(Date)
+    case cancelled
+
+    var title: String {
+        switch self {
+        case .notReviewed:
+            return "Preview not approved"
+        case .approved:
+            return "Preview approved locally"
+        case .cancelled:
+            return "Approval cancelled"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .notReviewed:
+            return "Review the local summary before any future AI request."
+        case .approved(let date):
+            return "Approved at \(date.formatted(date: .omitted, time: .shortened)). No network request has been made."
+        case .cancelled:
+            return "Nothing will be sent unless you approve a preview later."
+        }
+    }
 }
 
 enum DemoData {
@@ -151,6 +183,7 @@ final class HealthPassportAppState: ObservableObject {
     @Published var fitbitImportStatusMessage = "No Fitbit fixture has been imported yet."
     @Published var passportMetricFilter: VaultMetric?
     @Published var passportSourceFilter: String?
+    @Published private(set) var coachConsentStatus: CoachConsentStatus = .notReviewed
 
     private let vaultStore: EncryptedVaultStore?
     private let healthClient: HealthWritebackClient
@@ -304,6 +337,10 @@ final class HealthPassportAppState: ObservableObject {
         )
     }
 
+    var canApproveCoachContext: Bool {
+        !vaultSnapshot.samples.isEmpty && !coachContextPreview.isEmpty
+    }
+
     var vaultSourceCount: Int {
         vaultSnapshot.sources.count
     }
@@ -317,6 +354,19 @@ final class HealthPassportAppState: ObservableObject {
         passportSourceFilter = nil
     }
 
+    func approveCoachContextPreview() {
+        guard canApproveCoachContext else {
+            coachConsentStatus = .cancelled
+            return
+        }
+
+        coachConsentStatus = .approved(Date())
+    }
+
+    func cancelCoachContextPreview() {
+        coachConsentStatus = .cancelled
+    }
+
     func loadVault() {
         guard let vaultStore else {
             loopStatusMessage = startupError ?? "Local vault is unavailable."
@@ -324,7 +374,7 @@ final class HealthPassportAppState: ObservableObject {
         }
 
         do {
-            vaultSnapshot = try vaultStore.load()
+            replaceVaultSnapshot(try vaultStore.load())
         } catch {
             loopStatusMessage = "Local vault could not be loaded: \(error.localizedDescription)"
         }
@@ -379,7 +429,7 @@ final class HealthPassportAppState: ObservableObject {
 
             snapshot.receipts.append(vaultReceipt)
             try vaultStore.save(snapshot)
-            vaultSnapshot = try vaultStore.load()
+            replaceVaultSnapshot(try vaultStore.load())
             loopStatusMessage = "Writeback receipt saved."
         } catch {
             loopStatusMessage = "Writeback loop failed: \(error.localizedDescription)"
@@ -420,11 +470,16 @@ final class HealthPassportAppState: ObservableObject {
             snapshot.receipts.append(receipt)
 
             try vaultStore.save(snapshot)
-            vaultSnapshot = try vaultStore.load()
+            replaceVaultSnapshot(try vaultStore.load())
             fitbitImportStatusMessage = "\(dedupeResult.accepted.count) Fitbit fixture samples imported, \(dedupeResult.duplicates.count) duplicates skipped."
         } catch {
             fitbitImportStatusMessage = "Fitbit fixture import failed: \(error.localizedDescription)"
         }
+    }
+
+    private func replaceVaultSnapshot(_ snapshot: VaultSnapshot) {
+        vaultSnapshot = snapshot
+        coachConsentStatus = .notReviewed
     }
 
     private func metricStatus(for coverageStatus: PassportMetricCoverageStatus) -> MetricStatus {
