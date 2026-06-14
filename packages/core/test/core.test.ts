@@ -9,6 +9,8 @@ import {
   fitbitLegacyScopesForMetrics,
   googleHealthScopesForMetrics,
   GOOGLE_HEALTH_SCOPES,
+  reviewCoachResponse,
+  wellnessCoachBoundary,
   createSyncReceipt,
   dedupeSamplesAgainstExisting,
   dedupeSamples,
@@ -212,4 +214,23 @@ test("keeps legacy Fitbit scopes separate from Google Health scopes", () => {
   assert.equal(plans[0]?.flow, "authorization_code_pkce");
   assert.equal(plans[0]?.requiresClientSecret, false);
   assert.equal(plans[1]?.providerId, "fitbit_web_api_legacy");
+});
+
+test("allows wellness-only coach explanations", () => {
+  const decision = reviewCoachResponse("Your sleep average is lower this week and Tuesday has a data gap.");
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.reason, "wellness_only");
+  assert.equal(decision.safeReply.includes("sleep average"), true);
+});
+
+test("blocks diagnosis and treatment style coach responses", () => {
+  const diagnosis = reviewCoachResponse("This means you have a heart condition.");
+  const treatment = reviewCoachResponse("You should change your medication dose.");
+
+  assert.equal(diagnosis.allowed, false);
+  assert.equal(diagnosis.reason, "diagnosis_or_treatment");
+  assert.equal(treatment.allowed, false);
+  assert.equal(treatment.safeReply.includes("cannot diagnose"), true);
+  assert.equal(wellnessCoachBoundary().includes("Do not diagnose"), true);
 });
