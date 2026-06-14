@@ -69,8 +69,8 @@ enum ProviderOAuthConnectionStatus: Hashable {
             return "Add the iOS OAuth client ID and redirect scheme from Google Cloud before connecting."
         case .ready:
             return "Connect your test Google account to save read-only tokens in Keychain."
-        case .connected(let date, let scopes):
-            return "Connected at \(date.formatted(date: .omitted, time: .shortened)) with \(scopes.count) read-only scopes."
+        case .connected(let expiresAt, let scopes):
+            return "Token saved with \(scopes.count) read-only scopes. Expires at \(expiresAt.formatted(date: .abbreviated, time: .shortened))."
         case .failed(let message):
             return message
         }

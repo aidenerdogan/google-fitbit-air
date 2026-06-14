@@ -770,7 +770,7 @@ private struct GoogleHealthConnectionPanel: View {
                     .foregroundStyle(statusColor)
             }
 
-            Button(isConnecting ? "Connecting..." : "Connect Google Health", action: connectAction)
+            Button(connectButtonTitle, action: connectAction)
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.roundedRectangle(radius: 8))
                 .controlSize(.regular)
@@ -792,6 +792,19 @@ private struct GoogleHealthConnectionPanel: View {
             return "saved"
         case .failed:
             return "check"
+        }
+    }
+
+    private var connectButtonTitle: String {
+        if isConnecting {
+            return "Connecting..."
+        }
+
+        switch status {
+        case .connected:
+            return "Reconnect Google Health"
+        default:
+            return "Connect Google Health"
         }
     }
 

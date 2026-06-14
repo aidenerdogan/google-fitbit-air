@@ -70,6 +70,12 @@ struct ConnectedSourceSummary: Identifiable, Hashable {
     let receiptCount: Int
 }
 
+private enum GoogleHealthSource {
+    static let id = "google-health"
+    static let provider = "google_health"
+    static let displayName = "Google Health"
+}
+
 struct CoachContextPreview: Hashable {
     let title: String
     let summaryLines: [String]
@@ -254,6 +260,7 @@ final class HealthPassportAppState: ObservableObject {
         self.googleConnectionStatus = oauthClient.isConfigured ? .ready : .notConfigured
         self.startupError = startupError
         loadVault()
+        refreshGoogleConnectionStatus()
     }
 
     static func live() -> HealthPassportAppState {
@@ -459,9 +466,27 @@ final class HealthPassportAppState: ObservableObject {
 
         do {
             let tokens = try await googleHealthOAuthClient.connect()
-            googleConnectionStatus = .connected(Date(), tokens.scopes)
+            try saveGoogleHealthConnection(tokens: tokens)
+            googleConnectionStatus = .connected(tokens.expiresAt, tokens.scopes)
         } catch {
             googleConnectionStatus = .failed(error.localizedDescription)
+        }
+    }
+
+    func refreshGoogleConnectionStatus() {
+        guard googleHealthOAuthClient.isConfigured else {
+            googleConnectionStatus = .notConfigured
+            return
+        }
+
+        do {
+            if let tokens = try providerTokenStore.load(providerId: .googleHealth) {
+                googleConnectionStatus = .connected(tokens.expiresAt, tokens.scopes)
+            } else {
+                googleConnectionStatus = .ready
+            }
+        } catch {
+            googleConnectionStatus = .failed("Google token status could not be read from Keychain.")
         }
     }
 
@@ -476,6 +501,32 @@ final class HealthPassportAppState: ObservableObject {
         } catch {
             loopStatusMessage = "Local vault could not be loaded: \(error.localizedDescription)"
         }
+    }
+
+    private func saveGoogleHealthConnection(tokens: ProviderOAuthTokenSet) throws {
+        guard let vaultStore else {
+            throw AppVaultError.localVaultUnavailable(startupError ?? "Local vault is unavailable.")
+        }
+
+        var snapshot = try vaultStore.load()
+        let now = Date()
+        let source = VaultSource(
+            id: GoogleHealthSource.id,
+            displayName: GoogleHealthSource.displayName,
+            provider: GoogleHealthSource.provider,
+            connectedAt: snapshot.sources.first { $0.id == GoogleHealthSource.id }?.connectedAt ?? now,
+            lastSyncAt: now
+        )
+
+        if let index = snapshot.sources.firstIndex(where: { $0.id == GoogleHealthSource.id }) {
+            snapshot.sources[index] = source
+        } else {
+            snapshot.sources.append(source)
+        }
+
+        try vaultStore.save(snapshot)
+        replaceVaultSnapshot(try vaultStore.load())
+        googleConnectionStatus = .connected(tokens.expiresAt, tokens.scopes)
     }
 
     func requestAppleHealthAccess() async {
@@ -707,6 +758,8 @@ private extension String {
             return "Fitbit"
         case "fitbit_fixture":
             return "Development Fixture"
+        case "google_health":
+            return "Google Health"
         case "health_passport":
             return "Health Passport"
         default:
@@ -932,6 +985,7 @@ private enum AppVaultError: LocalizedError {
     case keychainReadFailed(OSStatus)
     case keychainWriteFailed(OSStatus)
     case randomKeyGenerationFailed(OSStatus)
+    case localVaultUnavailable(String)
 
     var errorDescription: String? {
         switch self {
@@ -943,6 +997,8 @@ private enum AppVaultError: LocalizedError {
             return "Could not save the vault key to Keychain: \(status)."
         case .randomKeyGenerationFailed(let status):
             return "Could not create a local vault key: \(status)."
+        case .localVaultUnavailable(let message):
+            return message
         }
     }
 }
