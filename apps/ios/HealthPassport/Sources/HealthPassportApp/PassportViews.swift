@@ -266,6 +266,8 @@ struct ReceiptsView: View {
 }
 
 struct CoachView: View {
+    @ObservedObject var appState: HealthPassportAppState
+
     var body: some View {
         NavigationStack {
             List {
@@ -276,13 +278,56 @@ struct CoachView: View {
                     )
                 }
 
-                Section("Coach mode") {
-                    Text("The coach will explain trends and gaps after you approve a small context summary.")
-                    Text("No diagnosis, treatment, or automatic health-data sharing.")
+                Section("Local preview") {
+                    CoachContextPanel(preview: appState.coachContextPreview)
+                }
+
+                Section("Consent") {
+                    Text("No context is sent from this screen.")
+                    Text("Future AI requests will require an approval step after this preview.")
                         .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Coach")
+        }
+    }
+}
+
+private struct CoachContextPanel: View {
+    let preview: CoachContextPreview
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(preview.title)
+                .font(.headline)
+
+            CoachLineGroup(title: "Summary", lines: preview.summaryLines)
+            CoachLineGroup(title: "Gaps", lines: preview.gapLines)
+            CoachLineGroup(title: "Receipts", lines: preview.receiptLines)
+
+            Text(preview.footer)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct CoachLineGroup: View {
+    let title: String
+    let lines: [String]
+
+    var body: some View {
+        if !lines.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                ForEach(lines, id: \.self) { line in
+                    Text(line)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 }

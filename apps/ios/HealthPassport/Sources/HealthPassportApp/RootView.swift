@@ -18,7 +18,7 @@ struct RootView: View {
                 .tabItem { Text("Receipts") }
                 .tag(PassportSection.receipts)
 
-            CoachView()
+            CoachView(appState: appState)
                 .tabItem { Text("Coach") }
                 .tag(PassportSection.coach)
 

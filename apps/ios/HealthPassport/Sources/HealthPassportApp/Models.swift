@@ -60,6 +60,14 @@ struct PassportTimelineItem: Identifiable, Hashable {
     let statusKind: MetricStatus
 }
 
+struct CoachContextPreview: Hashable {
+    let title: String
+    let summaryLines: [String]
+    let gapLines: [String]
+    let receiptLines: [String]
+    let footer: String
+}
+
 enum DemoData {
     static let metrics: [PassportMetric] = [
         PassportMetric(
@@ -279,6 +287,21 @@ final class HealthPassportAppState: ObservableObject {
                     items: items
                 )
             }
+    }
+
+    var coachContextPreview: CoachContextPreview {
+        let contextPack = CoachContextPackBuilder.make(snapshot: vaultSnapshot)
+        let footer = contextPack.rawHealthSamplesIncluded
+            ? "Raw sample sharing is blocked."
+            : "Raw samples stay in the local vault."
+
+        return CoachContextPreview(
+            title: contextPack.title,
+            summaryLines: contextPack.summaryLines,
+            gapLines: contextPack.gapLines,
+            receiptLines: contextPack.receiptLines,
+            footer: footer
+        )
     }
 
     var vaultSourceCount: Int {

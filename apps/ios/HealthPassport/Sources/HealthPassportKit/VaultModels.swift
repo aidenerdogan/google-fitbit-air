@@ -354,3 +354,112 @@ public enum PassportGapAnalyzer {
         return sample.startAt <= dayEnd && sampleEnd >= dayStart
     }
 }
+
+public struct CoachContextPack: Hashable, Sendable {
+    public let title: String
+    public let summaryLines: [String]
+    public let gapLines: [String]
+    public let receiptLines: [String]
+    public let rawHealthSamplesIncluded: Bool
+
+    public init(
+        title: String,
+        summaryLines: [String],
+        gapLines: [String],
+        receiptLines: [String],
+        rawHealthSamplesIncluded: Bool = false
+    ) {
+        self.title = title
+        self.summaryLines = summaryLines
+        self.gapLines = gapLines
+        self.receiptLines = receiptLines
+        self.rawHealthSamplesIncluded = rawHealthSamplesIncluded
+    }
+
+    public var isEmpty: Bool {
+        summaryLines.isEmpty && gapLines.isEmpty && receiptLines.isEmpty
+    }
+}
+
+public enum CoachContextPackBuilder {
+    public static func make(
+        snapshot: VaultSnapshot,
+        gapAnalysis: PassportGapAnalysis? = nil,
+        receiptLimit: Int = 3
+    ) -> CoachContextPack {
+        let analysis = gapAnalysis ?? PassportGapAnalyzer.analyze(snapshot: snapshot)
+        let sourceCount = snapshot.sources.count
+        let sampleCount = snapshot.samples.count
+        let receiptCount = snapshot.receipts.count
+        let summaryLines: [String]
+
+        if sampleCount == 0 {
+            summaryLines = [
+                "No local wearable samples are available yet.",
+                "Connect or import a source before creating a coach prompt."
+            ]
+        } else {
+            summaryLines = [
+                "\(sampleCount) local sample\(sampleCount == 1 ? "" : "s") preserved across \(sourceCount) source\(sourceCount == 1 ? "" : "s").",
+                "\(analysis.readyMetricCount) of \(analysis.metrics.count) tracked metrics have coverage in the current window.",
+                "\(analysis.totalMissingDays) missing metric day\(analysis.totalMissingDays == 1 ? "" : "s") detected."
+            ]
+        }
+
+        let gapLines = analysis.metrics
+            .filter { $0.status != .ready }
+            .map(gapLine(for:))
+
+        let receiptLines = snapshot.receipts
+            .sorted { $0.finishedAt > $1.finishedAt }
+            .prefix(max(0, receiptLimit))
+            .map { receipt in
+                "\(receipt.imported) imported, \(receipt.writtenToAppleHealth) written, \(receipt.skippedDuplicates + receipt.skippedWriteback) skipped, \(receipt.unsupportedMetrics.count) unsupported, \(receipt.failedToAppleHealth) failed."
+            }
+
+        return CoachContextPack(
+            title: sampleCount == 0 ? "Coach preview is waiting for local data" : "Coach preview uses local summaries",
+            summaryLines: summaryLines,
+            gapLines: gapLines,
+            receiptLines: receiptLines.isEmpty && receiptCount == 0 ? ["No sync receipts are available yet."] : Array(receiptLines)
+        )
+    }
+
+    private static func gapLine(for coverage: PassportMetricCoverage) -> String {
+        let name = displayName(for: coverage.metric)
+
+        switch coverage.status {
+        case .ready:
+            return "\(name) has coverage."
+        case .gap:
+            return "\(name) has \(coverage.missingDays.count) missing day\(coverage.missingDays.count == 1 ? "" : "s") in the current window."
+        case .blocked:
+            return "\(name) has no local samples yet."
+        case .passportOnly:
+            return "\(name) is preserved locally and excluded from Apple Health writeback."
+        }
+    }
+
+    private static func displayName(for metric: VaultMetric) -> String {
+        switch metric {
+        case .steps:
+            return "Steps"
+        case .workout:
+            return "Workouts"
+        case .sleep:
+            return "Sleep"
+        case .heartRate:
+            return "Heart rate"
+        case .restingHeartRate:
+            return "Resting heart rate"
+        case .activeEnergy:
+            return "Active energy"
+        case .distance:
+            return "Distance"
+        case .hrvSdnn:
+            return "HRV SDNN"
+        case .hrvRmssd:
+            return "HRV RMSSD"
+        }
+    }
+}

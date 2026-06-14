@@ -66,17 +66,27 @@ verify() {
 
 resolve_node_bin() {
   local bundled_node="$HOME/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"
+  local candidates=()
 
-  if [[ -n "${NODE_BIN:-}" ]]; then
-    echo "$NODE_BIN"
-  elif command -v node >/dev/null 2>&1; then
-    command -v node
-  elif [[ -x "$bundled_node" ]]; then
-    echo "$bundled_node"
+  [[ -n "${NODE_BIN:-}" ]] && candidates+=("$NODE_BIN")
+  [[ -x "$bundled_node" ]] && candidates+=("$bundled_node")
+  command -v node >/dev/null 2>&1 && candidates+=("$(command -v node)")
+
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "$candidate" ]] && "$candidate" --experimental-transform-types --eval "" >/dev/null 2>&1; then
+      echo "$candidate"
+      return
+    fi
+  done
+
+  if [[ ${#candidates[@]} -gt 0 ]]; then
+    echo "Found Node.js, but none of the candidates support --experimental-transform-types." >&2
+    printf 'Candidate: %s\n' "${candidates[@]}" >&2
   else
-    echo "Node.js was not found. Set NODE_BIN=/path/to/node and rerun verify." >&2
-    exit 1
+    echo "Node.js was not found." >&2
   fi
+  echo "Set NODE_BIN=/path/to/node>=24 and rerun verify." >&2
+  exit 1
 }
 
 case "${1:-}" in

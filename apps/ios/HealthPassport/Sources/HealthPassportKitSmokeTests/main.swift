@@ -8,6 +8,7 @@ try runLegacyVaultReceiptDecodeSmokeTests()
 try runFitbitFixtureImportReceiptSmokeTests()
 try runDuplicateImportReceiptSmokeTests()
 try runPassportGapAnalysisSmokeTests()
+try runCoachContextPackSmokeTests()
 print("HealthPassportKitSmokeTests passed")
 
 private func runEncryptedVaultSmokeTests() throws {
@@ -253,6 +254,49 @@ private func runPassportGapAnalysisSmokeTests() throws {
     assert(sleep?.missingDays.count == 1, "Sleep should miss exactly one day")
     assert(workout?.status == .blocked, "Workout should be blocked without samples")
     assert(workout?.missingDays.count == 2, "Workout should miss both days")
+}
+
+private func runCoachContextPackSmokeTests() throws {
+    let source = SourceReference(provider: "fitbit", deviceModel: "Fitbit Fixture")
+    let sample = VaultSample(
+        id: "heart-rate-1",
+        metric: .heartRate,
+        startAt: Date(timeIntervalSince1970: 1_781_337_600),
+        numericValue: 72,
+        unit: "count/min",
+        source: source,
+        externalId: "external-secret-1",
+        confidence: .high
+    )
+    let snapshot = VaultSnapshot(
+        sources: [
+            VaultSource(
+                id: "fitbit",
+                displayName: "Fitbit",
+                provider: "fitbit",
+                connectedAt: Date(timeIntervalSince1970: 1_781_300_000)
+            )
+        ],
+        samples: [sample],
+        receipts: [
+            VaultReceipt(
+                id: "receipt-1",
+                sourceId: "fitbit",
+                startedAt: Date(timeIntervalSince1970: 1_781_337_700),
+                finishedAt: Date(timeIntervalSince1970: 1_781_337_705),
+                imported: 1,
+                writtenToAppleHealth: 1
+            )
+        ]
+    )
+    let contextPack = CoachContextPackBuilder.make(snapshot: snapshot)
+    let previewText = (contextPack.summaryLines + contextPack.gapLines + contextPack.receiptLines).joined(separator: "\n")
+
+    assert(!contextPack.rawHealthSamplesIncluded, "Coach context preview must not include raw health samples")
+    assert(previewText.contains("1 local sample"), "Coach preview should summarize local sample counts")
+    assert(previewText.contains("1 imported"), "Coach preview should summarize receipt counts")
+    assert(!previewText.contains("72"), "Coach preview should not include raw sample values")
+    assert(!previewText.contains("external-secret-1"), "Coach preview should not include external source ids")
 }
 
 private func temporaryVaultURL() -> URL {
