@@ -62,13 +62,39 @@ test("AI relay accepts summary context placeholders", async () => {
       body: JSON.stringify({
         userApproved: true,
         summary: "Sleep average dropped by 20 minutes this week.",
-        gaps: ["No heart rate data on Tuesday."]
+        gaps: ["No heart rate data on Tuesday."],
+        draftCoachResponse: "Your sleep average is lower this week, and Tuesday has a data gap."
       })
     });
     const body = await response.json();
 
     assert.equal(response.status, 202);
     assert.equal(body.accepted, true);
+    assert.equal(body.coachBoundary.includes("Do not diagnose"), true);
+  } finally {
+    await close();
+  }
+});
+
+test("AI relay rejects unsafe coach draft responses", async () => {
+  const { baseUrl, close } = await startTestServer();
+  try {
+    const response = await fetch(`${baseUrl}/ai/context-packs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userApproved: true,
+        summary: "Heart rate trend changed this week.",
+        draftCoachResponse: "This means you have a heart condition and should change your medication dose."
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 422);
+    assert.equal(body.error, "unsafe_coach_response_rejected");
+    assert.equal(body.reason, "diagnosis_or_treatment");
+    assert.equal(body.matchedTerms.includes("medication"), true);
+    assert.equal(body.safeReply.includes("cannot diagnose"), true);
   } finally {
     await close();
   }

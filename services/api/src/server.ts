@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 
+import { reviewCoachResponse, wellnessCoachBoundary } from "../../../packages/core/src/coachSafety.ts";
 import { containsRawHealthData, createPrivacyAuditEvent, type PrivacyAuditEvent } from "./privacy.ts";
 
 export interface ApiOptions {
@@ -52,9 +53,24 @@ export function createHealthPassportApi(options: ApiOptions = {}) {
           });
         }
 
+        const draftCoachResponse = extractDraftCoachResponse(body);
+        if (draftCoachResponse) {
+          const safety = reviewCoachResponse(draftCoachResponse);
+          if (!safety.allowed) {
+            return sendJson(response, 422, {
+              error: "unsafe_coach_response_rejected",
+              reason: safety.reason,
+              matchedTerms: safety.matchedTerms,
+              safeReply: safety.safeReply,
+              boundary: wellnessCoachBoundary()
+            });
+          }
+        }
+
         return sendJson(response, 202, {
           accepted: true,
           mode: "preview-relay-placeholder",
+          coachBoundary: wellnessCoachBoundary(),
           receivedAt: receivedAt.toISOString()
         });
       }
@@ -80,6 +96,15 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   }
 
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+function extractDraftCoachResponse(body: unknown): string | undefined {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return undefined;
+  }
+
+  const draftCoachResponse = (body as Record<string, unknown>).draftCoachResponse;
+  return typeof draftCoachResponse === "string" && draftCoachResponse.trim().length > 0 ? draftCoachResponse : undefined;
 }
 
 function sendJson(response: ServerResponse, statusCode: number, body: Record<string, unknown>) {
