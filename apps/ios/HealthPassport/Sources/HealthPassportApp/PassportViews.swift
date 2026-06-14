@@ -1,6 +1,10 @@
 import HealthPassportKit
 import SwiftUI
 
+#if os(iOS) && canImport(UIKit)
+import UIKit
+#endif
+
 struct PassportView: View {
     @ObservedObject var appState: HealthPassportAppState
 
@@ -578,6 +582,8 @@ private struct SourceRow: View {
 }
 
 private struct HealthPermissionPanel: View {
+    @Environment(\.openURL) private var openURL
+
     let snapshot: HealthPermissionSnapshot
     let isRequesting: Bool
     let requestAction: () -> Void
@@ -608,6 +614,23 @@ private struct HealthPermissionPanel: View {
             .buttonBorderShape(.roundedRectangle(radius: 8))
             .controlSize(.regular)
             .disabled(isRequesting)
+
+            if snapshot.status.needsSettingsRecovery {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(snapshot.status.recoveryHint)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    if let settingsURL {
+                        Button("Open App Settings") {
+                            openURL(settingsURL)
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.roundedRectangle(radius: 8))
+                        .controlSize(.small)
+                    }
+                }
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(snapshot.requestedTypes) { type in
@@ -641,6 +664,14 @@ private struct HealthPermissionPanel: View {
         case .denied: .red
         case .unavailable: .gray
         }
+    }
+
+    private var settingsURL: URL? {
+        #if os(iOS) && canImport(UIKit)
+        URL(string: UIApplication.openSettingsURLString)
+        #else
+        nil
+        #endif
     }
 }
 

@@ -29,6 +29,21 @@ enum HealthPermissionStatus: String {
     case partiallyGranted
     case denied
     case unavailable
+
+    var needsSettingsRecovery: Bool {
+        self == .partiallyGranted || self == .denied
+    }
+
+    var recoveryHint: String {
+        switch self {
+        case .partiallyGranted:
+            return "Open Settings to turn on missing write permissions when you want full Apple Health writeback."
+        case .denied:
+            return "Open Settings to allow Apple Health writeback for supported metrics."
+        case .notRequested, .granted, .unavailable:
+            return ""
+        }
+    }
 }
 
 struct HealthPermissionTypeSnapshot: Identifiable, Hashable {
