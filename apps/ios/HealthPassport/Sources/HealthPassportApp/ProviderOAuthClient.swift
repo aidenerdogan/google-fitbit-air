@@ -31,7 +31,7 @@ struct GoogleHealthOAuthConfiguration: Hashable {
     }
 
     var isConfigured: Bool {
-            !clientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !clientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             !clientId.contains("REPLACE_ME") &&
             !clientId.contains("$(") &&
             !redirectScheme.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
