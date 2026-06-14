@@ -172,6 +172,42 @@ struct OnboardingStep: Identifiable, Hashable {
     let detail: String
 }
 
+enum ProviderOAuthProviderID: String, Codable, CaseIterable, Hashable {
+    case googleHealth = "google_health"
+    case fitbitWebApiLegacy = "fitbit_web_api_legacy"
+}
+
+struct ProviderOAuthTokenSet: Codable, Equatable, Hashable {
+    let providerId: ProviderOAuthProviderID
+    let accessToken: String
+    let refreshToken: String?
+    let tokenType: String
+    let expiresAt: Date
+    let scopes: [String]
+
+    init(
+        providerId: ProviderOAuthProviderID,
+        accessToken: String,
+        refreshToken: String? = nil,
+        tokenType: String = "Bearer",
+        expiresAt: Date,
+        scopes: [String]
+    ) {
+        self.providerId = providerId
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+        self.tokenType = tokenType
+        self.expiresAt = expiresAt
+        self.scopes = scopes.sorted()
+    }
+}
+
+protocol ProviderTokenStoring {
+    func save(_ tokens: ProviderOAuthTokenSet) throws
+    func load(providerId: ProviderOAuthProviderID) throws -> ProviderOAuthTokenSet?
+    func delete(providerId: ProviderOAuthProviderID) throws
+}
+
 @MainActor
 final class HealthPassportAppState: ObservableObject {
     @Published private(set) var vaultSnapshot: VaultSnapshot = .empty
@@ -187,11 +223,18 @@ final class HealthPassportAppState: ObservableObject {
 
     private let vaultStore: EncryptedVaultStore?
     private let healthClient: HealthWritebackClient
+    private let providerTokenStore: ProviderTokenStoring
     private let startupError: String?
 
-    init(vaultStore: EncryptedVaultStore?, healthClient: HealthWritebackClient, startupError: String? = nil) {
+    init(
+        vaultStore: EncryptedVaultStore?,
+        healthClient: HealthWritebackClient,
+        providerTokenStore: ProviderTokenStoring = KeychainProviderTokenStore(),
+        startupError: String? = nil
+    ) {
         self.vaultStore = vaultStore
         self.healthClient = healthClient
+        self.providerTokenStore = providerTokenStore
         self.startupError = startupError
         loadVault()
     }
@@ -846,6 +889,105 @@ private enum AppVaultError: LocalizedError {
         case .randomKeyGenerationFailed(let status):
             return "Could not create a local vault key: \(status)."
         }
+    }
+}
+
+private enum ProviderTokenStoreError: LocalizedError {
+    case keychainReadFailed(OSStatus)
+    case keychainWriteFailed(OSStatus)
+    case keychainDeleteFailed(OSStatus)
+    case unreadableTokenSet
+
+    var errorDescription: String? {
+        switch self {
+        case .keychainReadFailed(let status):
+            return "Could not read provider tokens from Keychain: \(status)."
+        case .keychainWriteFailed(let status):
+            return "Could not save provider tokens to Keychain: \(status)."
+        case .keychainDeleteFailed(let status):
+            return "Could not delete provider tokens from Keychain: \(status)."
+        case .unreadableTokenSet:
+            return "Provider tokens in Keychain could not be decoded."
+        }
+    }
+}
+
+struct KeychainProviderTokenStore: ProviderTokenStoring {
+    private let service = "com.healthpassport.provider-tokens"
+
+    func save(_ tokens: ProviderOAuthTokenSet) throws {
+        let data = try encoder().encode(tokens)
+        var addQuery = baseQuery(providerId: tokens.providerId)
+        addQuery[kSecValueData as String] = data
+        #if os(iOS)
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        #endif
+
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        if addStatus == errSecSuccess {
+            return
+        }
+
+        guard addStatus == errSecDuplicateItem else {
+            throw ProviderTokenStoreError.keychainWriteFailed(addStatus)
+        }
+
+        let updateStatus = SecItemUpdate(
+            baseQuery(providerId: tokens.providerId) as CFDictionary,
+            [kSecValueData as String: data] as CFDictionary
+        )
+        guard updateStatus == errSecSuccess else {
+            throw ProviderTokenStoreError.keychainWriteFailed(updateStatus)
+        }
+    }
+
+    func load(providerId: ProviderOAuthProviderID) throws -> ProviderOAuthTokenSet? {
+        var query = baseQuery(providerId: providerId)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecItemNotFound {
+            return nil
+        }
+        guard status == errSecSuccess, let data = item as? Data else {
+            throw ProviderTokenStoreError.keychainReadFailed(status)
+        }
+
+        do {
+            return try decoder().decode(ProviderOAuthTokenSet.self, from: data)
+        } catch {
+            throw ProviderTokenStoreError.unreadableTokenSet
+        }
+    }
+
+    func delete(providerId: ProviderOAuthProviderID) throws {
+        let status = SecItemDelete(baseQuery(providerId: providerId) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw ProviderTokenStoreError.keychainDeleteFailed(status)
+        }
+    }
+
+    private func baseQuery(providerId: ProviderOAuthProviderID) -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: providerId.rawValue
+        ]
+    }
+
+    private func encoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }
+
+    private func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }
 
