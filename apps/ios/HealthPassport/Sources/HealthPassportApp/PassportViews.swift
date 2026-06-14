@@ -248,6 +248,17 @@ struct SourcesView: View {
                     }
                 }
 
+                Section("Google Health") {
+                    GoogleHealthConnectionPanel(
+                        status: appState.googleConnectionStatus,
+                        isConnecting: appState.isConnectingGoogleHealth,
+                        connectAction: {
+                            Task { await appState.connectGoogleHealth() }
+                        }
+                    )
+                    .healthPanelRow()
+                }
+
                 Section("Apple Health") {
                     HealthPermissionPanel(
                         snapshot: appState.permissionSnapshot,
@@ -729,6 +740,71 @@ private struct ConnectedSourceRow: View {
             Text("\(source.receiptCount) receipt\(source.receiptCount == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct GoogleHealthConnectionPanel: View {
+    let status: ProviderOAuthConnectionStatus
+    let isConnecting: Bool
+    let connectAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(status.title)
+                        .font(.headline)
+                    Text(status.detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text(statusBadge)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(statusColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(statusColor)
+            }
+
+            Button(isConnecting ? "Connecting..." : "Connect Google Health", action: connectAction)
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 8))
+                .controlSize(.regular)
+                .disabled(isConnecting || status == .notConfigured)
+
+            Text("Read-only Google scopes are requested. Tokens are saved in Keychain, not in app files.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var statusBadge: String {
+        switch status {
+        case .notConfigured:
+            return "config"
+        case .ready:
+            return "ready"
+        case .connected:
+            return "saved"
+        case .failed:
+            return "check"
+        }
+    }
+
+    private var statusColor: Color {
+        switch status {
+        case .notConfigured:
+            return .orange
+        case .ready:
+            return .teal
+        case .connected:
+            return .green
+        case .failed:
+            return .red
         }
     }
 }

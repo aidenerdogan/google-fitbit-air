@@ -66,7 +66,23 @@ Expected result:
 - The Sources tab shows Apple Health writeback status.
 - HealthKit permission status updates after the request.
 
-## 6. If Something Looks Wrong
+## 6. Add Google Health OAuth Local Config
+
+Use this after the Google Cloud iOS OAuth client exists.
+
+1. In Xcode, click the blue `HealthPassport` project icon.
+2. Select the `HealthPassportApp` target.
+3. Open `Build Settings`.
+4. Search for `GOOGLE_HEALTH_IOS_CLIENT_ID`.
+5. Replace `REPLACE_ME_WITH_GOOGLE_IOS_CLIENT_ID` with the iOS OAuth client ID from Google Cloud.
+6. Search for `GOOGLE_HEALTH_OAUTH_REDIRECT_SCHEME`.
+7. Set it to your app bundle ID, for example `com.aiden.HealthPassport`, unless your Google OAuth client requires the reversed client ID scheme.
+8. Confirm the app builds, then open `Sources`.
+9. The `Connect Google Health` button should become enabled when both values are configured.
+
+Do not add a client secret to the app. The iOS flow uses PKCE and stores returned tokens in Keychain.
+
+## 7. If Something Looks Wrong
 
 If Xcode still opens the repo as files only:
 

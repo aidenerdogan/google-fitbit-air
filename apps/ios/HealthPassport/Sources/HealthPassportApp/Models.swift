@@ -225,8 +225,10 @@ final class HealthPassportAppState: ObservableObject {
     @Published var isRequestingAppleHealth = false
     @Published var isRunningWritebackLoop = false
     @Published var isImportingFitbitFixture = false
+    @Published var isConnectingGoogleHealth = false
     @Published var loopStatusMessage = "No writeback loop has run yet."
     @Published var fitbitImportStatusMessage = "No Fitbit fixture has been imported yet."
+    @Published var googleConnectionStatus: ProviderOAuthConnectionStatus
     @Published var passportMetricFilter: VaultMetric?
     @Published var passportSourceFilter: String?
     @Published private(set) var coachConsentStatus: CoachConsentStatus = .notReviewed
@@ -234,17 +236,22 @@ final class HealthPassportAppState: ObservableObject {
     private let vaultStore: EncryptedVaultStore?
     private let healthClient: HealthWritebackClient
     private let providerTokenStore: ProviderTokenStoring
+    private let googleHealthOAuthClient: GoogleHealthOAuthClient
     private let startupError: String?
 
     init(
         vaultStore: EncryptedVaultStore?,
         healthClient: HealthWritebackClient,
         providerTokenStore: ProviderTokenStoring = KeychainProviderTokenStore(),
+        googleHealthOAuthClient: GoogleHealthOAuthClient? = nil,
         startupError: String? = nil
     ) {
         self.vaultStore = vaultStore
         self.healthClient = healthClient
         self.providerTokenStore = providerTokenStore
+        let oauthClient = googleHealthOAuthClient ?? GoogleHealthOAuthClient(tokenStore: providerTokenStore)
+        self.googleHealthOAuthClient = oauthClient
+        self.googleConnectionStatus = oauthClient.isConfigured ? .ready : .notConfigured
         self.startupError = startupError
         loadVault()
     }
@@ -438,6 +445,24 @@ final class HealthPassportAppState: ObservableObject {
 
     func cancelCoachContextPreview() {
         coachConsentStatus = .cancelled
+    }
+
+    func connectGoogleHealth() async {
+        guard googleHealthOAuthClient.isConfigured else {
+            googleConnectionStatus = .notConfigured
+            return
+        }
+
+        isConnectingGoogleHealth = true
+        googleConnectionStatus = .ready
+        defer { isConnectingGoogleHealth = false }
+
+        do {
+            let tokens = try await googleHealthOAuthClient.connect()
+            googleConnectionStatus = .connected(Date(), tokens.scopes)
+        } catch {
+            googleConnectionStatus = .failed(error.localizedDescription)
+        }
     }
 
     func loadVault() {

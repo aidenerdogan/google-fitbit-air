@@ -18,6 +18,7 @@
 		010000000000000000000009 /* HealthPassportKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000012 /* HealthPassportKit.framework */; };
 		010000000000000000000010 /* HealthPassportKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000012 /* HealthPassportKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		010000000000000000000011 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 020000000000000000000013 /* HealthKit.framework */; };
+		010000000000000000000012 /* ProviderOAuthClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000015 /* ProviderOAuthClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -59,6 +60,7 @@
 		020000000000000000000012 /* HealthPassportKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = HealthPassportKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		020000000000000000000013 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		020000000000000000000014 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
+		020000000000000000000015 /* ProviderOAuthClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderOAuthClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,15 +87,15 @@
 			isa = PBXGroup;
 			children = (
 				020000000000000000000014 /* Package.swift */,
-				060000000000000000000002 /* HealthPassportApp */,
-				060000000000000000000003 /* HealthPassportKit */,
+				060000000000000000000002 /* Sources/HealthPassportApp */,
+				060000000000000000000003 /* Sources/HealthPassportKit */,
 				060000000000000000000004 /* Config */,
 				060000000000000000000005 /* Frameworks */,
 				060000000000000000000006 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		060000000000000000000002 /* HealthPassportApp */ = {
+		060000000000000000000002 /* Sources/HealthPassportApp */ = {
 			isa = PBXGroup;
 			children = (
 				020000000000000000000001 /* HealthPassportApp.swift */,
@@ -101,11 +103,12 @@
 				020000000000000000000003 /* Models.swift */,
 				020000000000000000000004 /* PassportViews.swift */,
 				020000000000000000000005 /* HealthWritebackClient.swift */,
+				020000000000000000000015 /* ProviderOAuthClient.swift */,
 			);
 			path = Sources/HealthPassportApp;
 			sourceTree = "<group>";
 		};
-		060000000000000000000003 /* HealthPassportKit */ = {
+		060000000000000000000003 /* Sources/HealthPassportKit */ = {
 			isa = PBXGroup;
 			children = (
 				020000000000000000000006 /* EncryptedVaultStore.swift */,
@@ -243,6 +246,7 @@
 				010000000000000000000003 /* Models.swift in Sources */,
 				010000000000000000000004 /* PassportViews.swift in Sources */,
 				010000000000000000000005 /* HealthWritebackClient.swift in Sources */,
+				010000000000000000000012 /* ProviderOAuthClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -394,6 +398,8 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_HEALTH_IOS_CLIENT_ID = REPLACE_ME_WITH_GOOGLE_IOS_CLIENT_ID;
+				GOOGLE_HEALTH_OAUTH_REDIRECT_SCHEME = com.healthpassport.app;
 				INFOPLIST_FILE = Config/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -419,6 +425,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_HEALTH_IOS_CLIENT_ID = REPLACE_ME_WITH_GOOGLE_IOS_CLIENT_ID;
+				GOOGLE_HEALTH_OAUTH_REDIRECT_SCHEME = com.healthpassport.app;
 				INFOPLIST_FILE = Config/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
