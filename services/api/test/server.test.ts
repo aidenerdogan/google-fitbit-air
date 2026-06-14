@@ -53,6 +53,28 @@ test("AI relay rejects raw health samples", async () => {
   }
 });
 
+test("AI relay requires explicit user approval", async () => {
+  const { baseUrl, close } = await startTestServer();
+  try {
+    for (const payload of [
+      { summary: "Sleep average changed this week." },
+      { userApproved: false, summary: "Sleep average changed this week." }
+    ]) {
+      const response = await fetch(`${baseUrl}/ai/context-packs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const body = await response.json();
+
+      assert.equal(response.status, 403);
+      assert.equal(body.error, "ai_consent_required");
+    }
+  } finally {
+    await close();
+  }
+});
+
 test("AI relay accepts summary context placeholders", async () => {
   const { baseUrl, close } = await startTestServer();
   try {

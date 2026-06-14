@@ -53,6 +53,13 @@ export function createHealthPassportApi(options: ApiOptions = {}) {
           });
         }
 
+        if (!hasExplicitAiApproval(body)) {
+          return sendJson(response, 403, {
+            error: "ai_consent_required",
+            message: "AI relay requires explicit user approval before accepting a context pack."
+          });
+        }
+
         const draftCoachResponse = extractDraftCoachResponse(body);
         if (draftCoachResponse) {
           const safety = reviewCoachResponse(draftCoachResponse);
@@ -96,6 +103,14 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   }
 
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+function hasExplicitAiApproval(body: unknown): boolean {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return false;
+  }
+
+  return (body as Record<string, unknown>).userApproved === true;
 }
 
 function extractDraftCoachResponse(body: unknown): string | undefined {
