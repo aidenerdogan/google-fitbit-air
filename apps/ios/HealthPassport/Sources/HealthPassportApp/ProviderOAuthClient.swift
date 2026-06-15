@@ -112,6 +112,25 @@ final class GoogleHealthOAuthClient: NSObject, ASWebAuthenticationPresentationCo
         return tokenSet
     }
 
+    func refresh(_ tokens: ProviderOAuthTokenSet) async throws -> ProviderOAuthTokenSet {
+        guard configuration.isConfigured else {
+            throw GoogleHealthOAuthError.missingConfiguration
+        }
+
+        guard let refreshToken = tokens.refreshToken, !refreshToken.isEmpty else {
+            throw GoogleHealthOAuthError.missingRefreshToken
+        }
+
+        let tokenResponse = try await refreshAccessToken(refreshToken)
+        let refreshedTokenSet = tokenResponse.tokenSet(
+            providerId: tokens.providerId,
+            requestedScopes: tokens.scopes,
+            existingRefreshToken: refreshToken
+        )
+        try tokenStore.save(refreshedTokenSet)
+        return refreshedTokenSet
+    }
+
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         #if os(iOS) && canImport(UIKit)
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
@@ -205,6 +224,33 @@ final class GoogleHealthOAuthClient: NSObject, ASWebAuthenticationPresentationCo
         return try JSONDecoder().decode(GoogleOAuthTokenResponse.self, from: data)
     }
 
+    private func refreshAccessToken(_ refreshToken: String) async throws -> GoogleOAuthTokenResponse {
+        var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        let form = [
+            URLQueryItem(name: "client_id", value: configuration.clientId),
+            URLQueryItem(name: "refresh_token", value: refreshToken),
+            URLQueryItem(name: "grant_type", value: "refresh_token")
+        ]
+
+        var body = URLComponents()
+        body.queryItems = form
+        request.httpBody = body.percentEncodedQuery?.data(using: .utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GoogleHealthOAuthError.tokenExchangeFailed("Google refresh response was not HTTP.")
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw GoogleHealthOAuthError.refreshFailed(httpResponse.statusCode)
+        }
+
+        return try JSONDecoder().decode(GoogleOAuthTokenResponse.self, from: data)
+    }
+
     private static func authorizationCode(from callbackURL: URL, expectedState: String) throws -> String {
         let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)
         let queryItems = components?.queryItems ?? []
@@ -240,12 +286,16 @@ private struct GoogleOAuthTokenResponse: Decodable {
         case scope
     }
 
-    func tokenSet(providerId: ProviderOAuthProviderID, requestedScopes: [String]) -> ProviderOAuthTokenSet {
+    func tokenSet(
+        providerId: ProviderOAuthProviderID,
+        requestedScopes: [String],
+        existingRefreshToken: String? = nil
+    ) -> ProviderOAuthTokenSet {
         let scopes = scope?.split(separator: " ").map(String.init) ?? requestedScopes
         return ProviderOAuthTokenSet(
             providerId: providerId,
             accessToken: accessToken,
-            refreshToken: refreshToken,
+            refreshToken: refreshToken ?? existingRefreshToken,
             tokenType: tokenType,
             expiresAt: Date().addingTimeInterval(expiresIn),
             scopes: scopes
@@ -260,6 +310,8 @@ enum GoogleHealthOAuthError: LocalizedError {
     case missingCallback
     case stateMismatch
     case missingAuthorizationCode
+    case missingRefreshToken
+    case refreshFailed(Int)
     case tokenExchangeFailed(String)
 
     var errorDescription: String? {
@@ -276,6 +328,10 @@ enum GoogleHealthOAuthError: LocalizedError {
             return "Google callback state did not match the current request."
         case .missingAuthorizationCode:
             return "Google callback did not include an authorization code."
+        case .missingRefreshToken:
+            return "Google token cannot be refreshed. Reconnect Google Health."
+        case .refreshFailed(let status):
+            return "Google token refresh failed with HTTP \(status). Reconnect Google Health."
         case .tokenExchangeFailed(let message):
             return "Token exchange failed: \(message)"
         }

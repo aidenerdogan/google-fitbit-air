@@ -494,7 +494,7 @@ final class HealthPassportAppState: ObservableObject {
         defer { isRefreshingGoogleMetadata = false }
 
         do {
-            guard let tokens = try providerTokenStore.load(providerId: .googleHealth) else {
+            guard let tokens = try await validGoogleHealthTokens() else {
                 googleMetadataStatusMessage = "Connect Google Health before refreshing metadata."
                 return
             }
@@ -691,7 +691,7 @@ final class HealthPassportAppState: ObservableObject {
         defer { isImportingGoogleHealthPreview = false }
 
         do {
-            guard let tokens = try providerTokenStore.load(providerId: .googleHealth) else {
+            guard let tokens = try await validGoogleHealthTokens() else {
                 googleImportStatusMessage = "Connect Google Health before importing a preview."
                 return
             }
@@ -772,6 +772,22 @@ final class HealthPassportAppState: ObservableObject {
         let numeric = sample.numericValue?.description ?? ""
         let text = sample.textValue ?? ""
         return "\(sample.source.provider):\(sample.metric.rawValue):\(sample.startAt.timeIntervalSince1970):\(end):\(numeric):\(text)"
+    }
+
+    private func validGoogleHealthTokens(now: Date = Date()) async throws -> ProviderOAuthTokenSet? {
+        guard let tokens = try providerTokenStore.load(providerId: .googleHealth) else {
+            googleConnectionStatus = googleHealthOAuthClient.isConfigured ? .ready : .notConfigured
+            return nil
+        }
+
+        guard tokens.expiresAt.timeIntervalSince(now) <= 60 else {
+            googleConnectionStatus = .connected(tokens.expiresAt, tokens.scopes)
+            return tokens
+        }
+
+        let refreshedTokens = try await googleHealthOAuthClient.refresh(tokens)
+        googleConnectionStatus = .connected(refreshedTokens.expiresAt, refreshedTokens.scopes)
+        return refreshedTokens
     }
 
     private func metricStatus(for coverageStatus: PassportMetricCoverageStatus) -> MetricStatus {
