@@ -234,9 +234,11 @@ final class HealthPassportAppState: ObservableObject {
     @Published var isImportingFitbitFixture = false
     @Published var isConnectingGoogleHealth = false
     @Published var isRefreshingGoogleMetadata = false
+    @Published var isImportingGoogleHealthPreview = false
     @Published var loopStatusMessage = "No writeback loop has run yet."
     @Published var fitbitImportStatusMessage = "No Fitbit fixture has been imported yet."
     @Published var googleMetadataStatusMessage = "Metadata has not been refreshed yet."
+    @Published var googleImportStatusMessage = "No Google Health preview import has run yet."
     @Published var googleConnectionStatus: ProviderOAuthConnectionStatus
     @Published var passportMetricFilter: VaultMetric?
     @Published var passportSourceFilter: String?
@@ -678,9 +680,98 @@ final class HealthPassportAppState: ObservableObject {
         }
     }
 
+    func importGoogleHealthPreview() async {
+        guard let vaultStore else {
+            googleImportStatusMessage = startupError ?? "Local vault is unavailable."
+            return
+        }
+
+        isImportingGoogleHealthPreview = true
+        googleImportStatusMessage = "Preparing Google Health preview import."
+        defer { isImportingGoogleHealthPreview = false }
+
+        do {
+            guard let tokens = try providerTokenStore.load(providerId: .googleHealth) else {
+                googleImportStatusMessage = "Connect Google Health before importing a preview."
+                return
+            }
+
+            let startedAt = Date()
+            let incomingSamples = try await googleHealthAPIClient.fetchDailyRollupSamples(tokens: tokens, days: 7, now: startedAt)
+            var snapshot = try vaultStore.load()
+            let source = VaultSource(
+                id: GoogleHealthSource.id,
+                displayName: GoogleHealthSource.displayName,
+                provider: GoogleHealthSource.provider,
+                connectedAt: snapshot.sources.first { $0.id == GoogleHealthSource.id }?.connectedAt ?? startedAt,
+                lastSyncAt: startedAt,
+                detail: snapshot.sources.first { $0.id == GoogleHealthSource.id }?.detail ?? "Daily rollup preview imported."
+            )
+
+            if let index = snapshot.sources.firstIndex(where: { $0.id == GoogleHealthSource.id }) {
+                snapshot.sources[index] = source
+            } else {
+                snapshot.sources.append(source)
+            }
+
+            let dedupeResult = dedupe(incomingSamples, against: snapshot.samples)
+            snapshot.samples.append(contentsOf: dedupeResult.accepted)
+            let gapsDetected = PassportGapAnalyzer.analyze(snapshot: snapshot).totalMissingDays
+            let finishedAt = Date()
+            let receipt = VaultReceipt(
+                id: UUID().uuidString,
+                sourceId: GoogleHealthSource.id,
+                startedAt: startedAt,
+                finishedAt: finishedAt,
+                imported: dedupeResult.accepted.count,
+                writtenToAppleHealth: 0,
+                skippedWriteback: dedupeResult.accepted.count,
+                skippedDuplicates: dedupeResult.duplicates.count,
+                gapsDetected: gapsDetected,
+                unsupportedMetrics: [.sleep, .workout, .restingHeartRate, .hrvRmssd]
+            )
+            snapshot.receipts.append(receipt)
+
+            try vaultStore.save(snapshot)
+            replaceVaultSnapshot(try vaultStore.load())
+            googleImportStatusMessage = "\(dedupeResult.accepted.count) Google Health samples imported, \(dedupeResult.duplicates.count) duplicates skipped, writeback deferred."
+        } catch {
+            googleImportStatusMessage = "Google Health preview import failed: \(error.localizedDescription)"
+        }
+    }
+
     private func replaceVaultSnapshot(_ snapshot: VaultSnapshot) {
         vaultSnapshot = snapshot
         coachConsentStatus = .notReviewed
+    }
+
+    private func dedupe(_ incoming: [VaultSample], against existing: [VaultSample]) -> (accepted: [VaultSample], duplicates: [VaultSample]) {
+        var seen = Set(existing.map { dedupeKey(for: $0) })
+        var accepted: [VaultSample] = []
+        var duplicates: [VaultSample] = []
+
+        for sample in incoming {
+            let key = dedupeKey(for: sample)
+            if seen.contains(key) {
+                duplicates.append(sample)
+            } else {
+                seen.insert(key)
+                accepted.append(sample)
+            }
+        }
+
+        return (accepted, duplicates)
+    }
+
+    private func dedupeKey(for sample: VaultSample) -> String {
+        if let externalId = sample.externalId {
+            return "\(sample.source.provider):\(sample.metric.rawValue):\(externalId)"
+        }
+
+        let end = sample.endAt?.timeIntervalSince1970.description ?? ""
+        let numeric = sample.numericValue?.description ?? ""
+        let text = sample.textValue ?? ""
+        return "\(sample.source.provider):\(sample.metric.rawValue):\(sample.startAt.timeIntervalSince1970):\(end):\(numeric):\(text)"
     }
 
     private func metricStatus(for coverageStatus: PassportMetricCoverageStatus) -> MetricStatus {

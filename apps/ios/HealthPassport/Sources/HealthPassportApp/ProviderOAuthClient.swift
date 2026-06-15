@@ -319,10 +319,53 @@ struct GoogleHealthAPIClient {
         return GoogleHealthMetadataSummary(profileReachable: true, pairedDeviceCount: pairedDevices.count)
     }
 
+    func fetchDailyRollupSamples(tokens: ProviderOAuthTokenSet, days: Int = 7, now: Date = Date()) async throws -> [VaultSample] {
+        guard tokens.expiresAt > Date() else {
+            throw GoogleHealthAPIError.expiredToken
+        }
+
+        let window = GoogleHealthRollupWindow(days: days, now: now)
+        var samples: [VaultSample] = []
+
+        for plan in GoogleHealthDailyRollupPlan.readyPlans {
+            guard tokens.scopes.contains(plan.requiredScope) else {
+                throw GoogleHealthAPIError.missingScope(plan.metric.rawValue)
+            }
+
+            let response = try await fetchDailyRollup(plan: plan, window: window, tokens: tokens)
+            samples.append(contentsOf: response.samples(for: plan, importedAt: now))
+        }
+
+        return samples
+    }
+
     private func fetchPairedDevices(tokens: ProviderOAuthTokenSet) async throws -> [GoogleHealthPairedDevice] {
         let data = try await fetchJSON(path: "/v4/users/me/pairedDevices?pageSize=100", tokens: tokens)
         let response = try JSONDecoder().decode(GoogleHealthPairedDevicesResponse.self, from: data)
         return response.pairedDevices ?? []
+    }
+
+    private func fetchDailyRollup(
+        plan: GoogleHealthDailyRollupPlan,
+        window: GoogleHealthRollupWindow,
+        tokens: ProviderOAuthTokenSet
+    ) async throws -> GoogleHealthDailyRollupResponse {
+        let body = GoogleHealthDailyRollupRequest(
+            range: GoogleHealthCivilTimeInterval(start: window.start, end: window.end),
+            windowSizeDays: 1,
+            pageSize: daysPageSize(window.days),
+            dataSourceFamily: "users/me/dataSourceFamilies/google-wearables"
+        )
+        let data = try await postJSON(
+            path: "/v4/users/me/dataTypes/\(plan.dataTypeID)/dataPoints:dailyRollUp",
+            tokens: tokens,
+            body: body
+        )
+        return try JSONDecoder().decode(GoogleHealthDailyRollupResponse.self, from: data)
+    }
+
+    private func daysPageSize(_ days: Int) -> Int {
+        max(1, min(days, 90))
     }
 
     private func fetchJSON(path: String, tokens: ProviderOAuthTokenSet) async throws -> Data {
@@ -333,6 +376,30 @@ struct GoogleHealthAPIClient {
         var request = URLRequest(url: url)
         request.setValue("\(tokens.tokenType) \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GoogleHealthAPIError.invalidResponse
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw GoogleHealthAPIError.requestFailed(httpResponse.statusCode)
+        }
+
+        return data
+    }
+
+    private func postJSON<Body: Encodable>(path: String, tokens: ProviderOAuthTokenSet, body: Body) async throws -> Data {
+        guard let url = URL(string: "https://health.googleapis.com\(path)") else {
+            throw GoogleHealthAPIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("\(tokens.tokenType) \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -373,6 +440,164 @@ enum GoogleHealthAPIError: LocalizedError {
         case .requestFailed(let status):
             return "Google Health metadata request failed with HTTP \(status)."
         }
+    }
+}
+
+private struct GoogleHealthDailyRollupPlan: Sendable {
+    let metric: VaultMetric
+    let dataTypeID: String
+    let requiredScope: String
+    let valueUnit: String
+    let value: @Sendable (GoogleHealthDailyRollupDataPoint) -> Double?
+
+    static let activityScope = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly"
+    static let metricsScope = "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly"
+
+    static let readyPlans: [GoogleHealthDailyRollupPlan] = [
+        GoogleHealthDailyRollupPlan(
+            metric: .steps,
+            dataTypeID: "steps",
+            requiredScope: activityScope,
+            valueUnit: "count"
+        ) { point in
+            point.steps?.countSum.flatMap(Double.init)
+        },
+        GoogleHealthDailyRollupPlan(
+            metric: .distance,
+            dataTypeID: "distance",
+            requiredScope: activityScope,
+            valueUnit: "m"
+        ) { point in
+            point.distance?.millimetersSum.flatMap(Double.init).map { $0 / 1_000 }
+        },
+        GoogleHealthDailyRollupPlan(
+            metric: .activeEnergy,
+            dataTypeID: "active-energy-burned",
+            requiredScope: activityScope,
+            valueUnit: "kcal"
+        ) { point in
+            point.activeEnergyBurned?.kcalSum
+        },
+        GoogleHealthDailyRollupPlan(
+            metric: .heartRate,
+            dataTypeID: "heart-rate",
+            requiredScope: metricsScope,
+            valueUnit: "count/min"
+        ) { point in
+            point.heartRate?.beatsPerMinuteAvg
+        }
+    ]
+}
+
+private struct GoogleHealthRollupWindow {
+    let days: Int
+    let start: GoogleHealthCivilDateTime
+    let end: GoogleHealthCivilDateTime
+
+    init(days: Int, now: Date, calendar: Calendar = PassportGapAnalyzer.utcCalendar) {
+        self.days = max(1, min(days, 14))
+        let today = calendar.startOfDay(for: now)
+        let startDate = calendar.date(byAdding: .day, value: -(self.days - 1), to: today) ?? today
+        let endDate = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        self.start = GoogleHealthCivilDateTime(date: GoogleHealthCivilDate(date: startDate, calendar: calendar))
+        self.end = GoogleHealthCivilDateTime(date: GoogleHealthCivilDate(date: endDate, calendar: calendar))
+    }
+}
+
+private struct GoogleHealthDailyRollupRequest: Encodable {
+    let range: GoogleHealthCivilTimeInterval
+    let windowSizeDays: Int
+    let pageSize: Int
+    let dataSourceFamily: String
+}
+
+private struct GoogleHealthCivilTimeInterval: Encodable {
+    let start: GoogleHealthCivilDateTime
+    let end: GoogleHealthCivilDateTime
+}
+
+private struct GoogleHealthCivilDateTime: Codable, Hashable {
+    let date: GoogleHealthCivilDate
+}
+
+private struct GoogleHealthCivilDate: Codable, Hashable {
+    let year: Int
+    let month: Int
+    let day: Int
+
+    init(year: Int, month: Int, day: Int) {
+        self.year = year
+        self.month = month
+        self.day = day
+    }
+
+    init(date: Date, calendar: Calendar) {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        self.year = components.year ?? 1970
+        self.month = components.month ?? 1
+        self.day = components.day ?? 1
+    }
+
+    func date(calendar: Calendar = PassportGapAnalyzer.utcCalendar) -> Date? {
+        DateComponents(calendar: calendar, year: year, month: month, day: day).date
+    }
+
+    var stableID: String {
+        "\(year)-\(String(format: "%02d", month))-\(String(format: "%02d", day))"
+    }
+}
+
+private struct GoogleHealthDailyRollupResponse: Decodable {
+    let rollupDataPoints: [GoogleHealthDailyRollupDataPoint]
+
+    func samples(for plan: GoogleHealthDailyRollupPlan, importedAt: Date) -> [VaultSample] {
+        rollupDataPoints.compactMap { point in
+            guard let startAt = point.civilStartTime.date.date(),
+                  let endAt = point.civilEndTime.date.date(),
+                  let numericValue = plan.value(point)
+            else {
+                return nil
+            }
+
+            let dateID = point.civilStartTime.date.stableID
+            return VaultSample(
+                id: "google-health-\(plan.dataTypeID)-\(dateID)",
+                metric: plan.metric,
+                startAt: startAt,
+                endAt: endAt,
+                numericValue: numericValue,
+                unit: plan.valueUnit,
+                source: SourceReference(provider: "google_health", deviceModel: "Google wearable", appName: "Google Health"),
+                externalId: "google-health:daily-rollup:\(plan.dataTypeID):\(dateID)",
+                confidence: .medium,
+                importedAt: importedAt
+            )
+        }
+    }
+}
+
+private struct GoogleHealthDailyRollupDataPoint: Decodable {
+    let civilStartTime: GoogleHealthCivilDateTime
+    let civilEndTime: GoogleHealthCivilDateTime
+    let steps: Steps?
+    let distance: Distance?
+    let activeEnergyBurned: ActiveEnergyBurned?
+    let heartRate: HeartRate?
+
+    struct Steps: Decodable {
+        let countSum: String?
+    }
+
+    struct Distance: Decodable {
+        let millimetersSum: String?
+    }
+
+    struct ActiveEnergyBurned: Decodable {
+        let kcalSum: Double?
+    }
+
+    struct HeartRate: Decodable {
+        let beatsPerMinuteAvg: Double?
     }
 }
 

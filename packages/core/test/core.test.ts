@@ -6,8 +6,11 @@ import {
   analyzeMetricGaps,
   createMvpOAuthScopePlans,
   createDefaultCapabilityMatrix,
+  decodeGoogleHealthDailyRollup,
   fitbitLegacyScopesForMetrics,
+  googleHealthReadyDailyRollupMetrics,
   googleHealthScopesForMetrics,
+  GOOGLE_HEALTH_IMPORT_PLAN,
   GOOGLE_HEALTH_SCOPES,
   reviewCoachResponse,
   wellnessCoachBoundary,
@@ -215,6 +218,68 @@ test("keeps legacy Fitbit scopes separate from Google Health scopes", () => {
   assert.equal(plans[0]?.flow, "authorization_code_pkce");
   assert.equal(plans[0]?.requiresClientSecret, false);
   assert.equal(plans[1]?.providerId, "fitbit_web_api_legacy");
+});
+
+test("plans conservative Google Health daily rollup imports", () => {
+  const readyMetrics = googleHealthReadyDailyRollupMetrics().map((plan) => plan.metric).sort();
+
+  assert.deepEqual(readyMetrics, [
+    "active_energy",
+    "distance",
+    "heart_rate",
+    "steps"
+  ]);
+
+  const sleep = GOOGLE_HEALTH_IMPORT_PLAN.find((plan) => plan.metric === "sleep");
+  const restingHeartRate = GOOGLE_HEALTH_IMPORT_PLAN.find((plan) => plan.metric === "resting_heart_rate");
+  const hrv = GOOGLE_HEALTH_IMPORT_PLAN.find((plan) => plan.metric === "hrv_rmssd");
+
+  assert.equal(sleep?.status, "deferred");
+  assert.equal(restingHeartRate?.status, "deferred");
+  assert.equal(hrv?.appleHealthWriteback, "unsupported");
+  assert.equal(
+    GOOGLE_HEALTH_IMPORT_PLAN.some((plan) => plan.requiredScope.includes(".write")),
+    false
+  );
+});
+
+test("decodes Google Health daily rollup fixture samples", () => {
+  const response = {
+    rollupDataPoints: [
+      {
+        civilStartTime: { date: { year: 2026, month: 6, day: 14 } },
+        civilEndTime: { date: { year: 2026, month: 6, day: 15 } },
+        steps: { countSum: "4321" },
+        distance: { millimetersSum: "1234000" },
+        activeEnergyBurned: { kcalSum: 245.5 },
+        heartRate: { beatsPerMinuteAvg: 71.2 },
+        restingHeartRatePersonalRange: { beatsPerMinuteMin: 56 }
+      }
+    ]
+  };
+
+  const steps = decodeGoogleHealthDailyRollup({
+    metric: "steps",
+    response,
+    importedAt: "2026-06-15T10:00:00Z"
+  });
+  const distance = decodeGoogleHealthDailyRollup({
+    metric: "distance",
+    response,
+    importedAt: "2026-06-15T10:00:00Z"
+  });
+  const sleep = decodeGoogleHealthDailyRollup({
+    metric: "sleep",
+    response,
+    importedAt: "2026-06-15T10:00:00Z"
+  });
+
+  assert.equal(steps[0]?.value, 4321);
+  assert.equal(steps[0]?.source.provider, "google_health");
+  assert.equal(steps[0]?.externalId, "google-health:daily-rollup:steps:2026-06-14");
+  assert.equal(distance[0]?.value, 1234);
+  assert.equal(distance[0]?.unit, "m");
+  assert.equal(sleep.length, 0);
 });
 
 test("allows wellness-only coach explanations", () => {

@@ -288,8 +288,23 @@ struct SourcesView: View {
                     FixtureImportPanel(
                         statusMessage: appState.fitbitImportStatusMessage,
                         isImporting: appState.isImportingFitbitFixture,
+                        title: "Fixture import",
+                        buttonTitle: "Import Fitbit Fixture",
+                        runningTitle: "Importing...",
                         importAction: {
                             Task { await appState.importFitbitFixture() }
+                        }
+                    )
+                    .healthPanelRow()
+
+                    FixtureImportPanel(
+                        statusMessage: appState.googleImportStatusMessage,
+                        isImporting: appState.isImportingGoogleHealthPreview,
+                        title: "Google preview import",
+                        buttonTitle: "Preview Google Import",
+                        runningTitle: "Importing...",
+                        importAction: {
+                            Task { await appState.importGoogleHealthPreview() }
                         }
                     )
                     .healthPanelRow()
@@ -1004,19 +1019,22 @@ private struct WritebackLoopPanel: View {
 private struct FixtureImportPanel: View {
     let statusMessage: String
     let isImporting: Bool
+    var title = "Source import"
+    var buttonTitle = "Import Fitbit Fixture"
+    var runningTitle = "Importing..."
     let importAction: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Source import")
+                Text(title)
                     .font(.headline)
                 Text(statusMessage)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
-            Button(isImporting ? "Importing..." : "Import Fitbit Fixture", action: importAction)
+            Button(isImporting ? runningTitle : buttonTitle, action: importAction)
             .buttonStyle(.bordered)
             .buttonBorderShape(.roundedRectangle(radius: 8))
             .controlSize(.regular)
